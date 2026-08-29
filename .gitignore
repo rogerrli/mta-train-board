@@ -16,7 +16,6 @@ env/
 .env.*
 
 # Local config that may hold personal data
-config.local.toml
 config.local.*
 
 # Caches / downloaded GTFS static data
