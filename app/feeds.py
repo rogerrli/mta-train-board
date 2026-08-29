@@ -38,8 +38,6 @@ import httpx
 from google.protobuf.message import DecodeError
 from nyct_gtfs import NYCTFeed
 
-logger = logging.getLogger(__name__)
-
 # Base URL for the MTA GTFS-Realtime subway feeds. No API key required.
 _FEED_BASE = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds"
 
