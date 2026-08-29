@@ -5,8 +5,6 @@ falls back to the committed ``config.example.toml``. Parsing uses the stdlib
 ``tomllib`` (Python 3.11+).
 """
 
-from __future__ import annotations
-
 import tomllib
 from pathlib import Path
 from typing import Any

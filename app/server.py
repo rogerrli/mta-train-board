@@ -6,8 +6,6 @@ health check so a fresh clone can run the dev server:
     uv run uvicorn app.server:app --reload
 """
 
-from __future__ import annotations
-
 from fastapi import FastAPI
 
 app = FastAPI(title="MTA Train Board")
