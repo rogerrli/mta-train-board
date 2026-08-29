@@ -7,18 +7,57 @@
 # How often the frontend should refresh the board, in seconds.
 refresh_interval_seconds = 30
 
-# Stations to watch. Add one [[stations]] block per station.
-# `stop_id` is the GTFS parent stop ID from the MTA static `stops.txt`
-# (station-level IDs have no direction suffix, e.g. "635", not "635N"/"635S").
-# `directions` picks which platforms to show: "N" (northbound), "S" (southbound),
-# or both.
+# Stations to watch. Add one [[stations]] block per station + line-set you care
+# about. You identify stations by NAME and the LINES you want -- never by raw
+# GTFS stop ID. At startup the app resolves each block to concrete stop IDs from
+# the vendored MTA static station data (see app/stops.py).
+#
+#   name        Human station name, exactly as the MTA lists it (e.g.
+#               "Grand Central-42 St", "Hoyt-Schermerhorn Sts"). An unknown name
+#               produces a helpful error suggesting close matches.
+#   lines       The subway lines you want to see here (e.g. ["A", "C"]). Lines a
+#               station serves but you omit are filtered out -- their trains
+#               never show. A line the station does not serve is an error.
+#   directions  Which platforms to show: "N" (northbound) and/or "S"
+#               (southbound). Concrete stop IDs are the parent ID plus this
+#               letter (e.g. "A41" + "N" -> "A41N").
+#
+# A single station can appear in multiple blocks when you want different lines in
+# different directions (see Hoyt-Schermerhorn below).
 
+# Hoyt-Schermerhorn Sts: A/C Manhattan-bound only...
 [[stations]]
-name = "Grand Central-42 St"
-stop_id = "631"
+name = "Hoyt-Schermerhorn Sts"
+lines = ["A", "C"]
+directions = ["N"]
+
+# ...and the G in both directions (the G never enters Manhattan).
+[[stations]]
+name = "Hoyt-Schermerhorn Sts"
+lines = ["G"]
+directions = ["N", "S"]
+
+# Hoyt St (2/3) -- a different station from Hoyt-Schermerhorn.
+[[stations]]
+name = "Hoyt St"
+lines = ["2", "3"]
+directions = ["N"]
+
+# DeKalb Av (BMT): Q/R both ways, plus B Manhattan-bound. The lines here also
+# disambiguate this DeKalb Av from the unrelated one on the L line.
+[[stations]]
+name = "DeKalb Av"
+lines = ["Q", "R"]
 directions = ["N", "S"]
 
 [[stations]]
-name = "14 St-Union Sq"
-stop_id = "635"
+name = "DeKalb Av"
+lines = ["B"]
+directions = ["N"]
+
+# Jay St-MetroTech: only the F Manhattan-bound. The A/C/R that also stop here are
+# filtered out by omission.
+[[stations]]
+name = "Jay St-MetroTech"
+lines = ["F"]
 directions = ["N"]

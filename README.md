@@ -75,16 +75,24 @@ The arrivals endpoints land in later issues; for now the server just exposes
 ### Configuration
 
 User settings (watched stations, directions, refresh interval) live in a TOML
-file. `config.example.toml` is committed and documents the schema:
+file. You identify stations by **name + the lines you want + directions** —
+never by raw stop ID. At startup the app resolves each station to concrete GTFS
+stop IDs from vendored MTA static data (`app/data/stations.csv`).
+`config.example.toml` is committed and documents the schema:
 
 ```toml
 refresh_interval_seconds = 30
 
 [[stations]]
-name = "Grand Central-42 St"
-stop_id = "631"
-directions = ["N", "S"]
+name = "Hoyt-Schermerhorn Sts"   # exact MTA station name
+lines = ["A", "C"]               # only these lines show; others are filtered out
+directions = ["N", "S"]          # "N" = northbound, "S" = southbound
 ```
+
+Lines a station serves but you omit are filtered out (their trains never show),
+and the lines you list also disambiguate stations that share a name (e.g.
+"DeKalb Av" exists on both the BMT and the L). An unknown name or a line the
+station doesn't serve produces a helpful error listing what was found.
 
 To customize, copy it to a local override (gitignored so your settings stay
 private):
@@ -95,6 +103,26 @@ cp config.example.toml config.local.toml
 
 `app/config.py` loads `config.local.toml` if present, otherwise falls back to
 `config.example.toml`.
+
+To see how your config resolves to stop IDs:
+
+```sh
+uv run python -m app.stops
+```
+
+### Static station data
+
+Station → stop-ID resolution uses a vendored snapshot of the MTA "Subway
+Stations" open dataset (`app/data/stations.csv`), so the app and its tests run
+fully offline. Refresh it manually when the MTA changes stations or routes:
+
+```sh
+uv run scripts/refresh-stops
+```
+
+If a configured station fails to resolve in a way stale data could explain (an
+unknown name, or a line not associated with the station), the app also
+re-downloads this dataset once and retries automatically before erroring.
 
 ### Lint & format
 
