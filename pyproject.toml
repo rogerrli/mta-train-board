@@ -14,9 +14,18 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=1.11",
+    "pip-audit>=2.7",
     "pytest>=9.1.1",
     "ruff>=0.6",
 ]
+
+[tool.mypy]
+python_version = "3.12"
+# nyct_gtfs and its google.protobuf deps ship no type stubs; silence the
+# "missing import" noise rather than vendoring stubs. This is not strict mode:
+# real type errors in app/ still fail the check.
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py312"
