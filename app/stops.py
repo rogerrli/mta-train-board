@@ -174,11 +174,11 @@ class StopIndex:
                 stale_data_plausible=True,
             )
 
-        served = sorted({route for s in matches for route in s.routes})
         line_stops: dict[str, str] = {}
         for line in lines:
             hosts = [s for s in matches if line in s.routes]
             if not hosts:
+                served = sorted({route for s in matches for route in s.routes})
                 raise StationResolutionError(
                     f"Station {name!r} does not serve line {line!r}. "
                     f"Lines here: {served}. Fix the config (or the line may have "
