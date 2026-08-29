@@ -29,14 +29,18 @@ e.g. ``uv run python -m app.feeds 6 631N``.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 from google.protobuf.message import DecodeError
 from nyct_gtfs import NYCTFeed
+
+# The MTA subway system runs on Eastern time; feed timestamps are Unix epochs
+# that nyct-gtfs decodes into naive host-local datetimes (see _to_eastern).
+_EASTERN = ZoneInfo("America/New_York")
 
 # Base URL for the MTA GTFS-Realtime subway feeds. No API key required.
 _FEED_BASE = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds"
@@ -100,23 +104,36 @@ class StopUpdate:
     """A single predicted stop for one trip, normalized from the feed.
 
     ``stop_id`` includes the direction suffix (e.g. ``"631N"``); ``direction`` is
-    the same "N"/"S" pulled out for convenience. ``arrival``/``departure`` are
-    naive local (America/New_York) datetimes and may be ``None`` (the feed omits
-    arrival at an origin terminal and departure at a destination terminal).
+    that same "N"/"S" suffix pulled out for convenience. ``arrival``/``departure``
+    are timezone-aware America/New_York datetimes and may be ``None`` (the feed
+    omits arrival at an origin terminal and departure at a destination terminal).
     """
 
     route_id: str
     trip_id: str
     stop_id: str
-    direction: str | None
+    direction: str
     arrival: datetime | None
     departure: datetime | None
+
+
+def _to_eastern(dt: datetime | None) -> datetime | None:
+    """Make a nyct-gtfs datetime timezone-aware in America/New_York.
+
+    nyct-gtfs builds arrival/departure via ``datetime.fromtimestamp(ts)`` with no
+    tzinfo, yielding a naive datetime in the *host's* local zone. Calling
+    ``astimezone`` on a naive datetime interprets it as host-local and converts to
+    Eastern, so the result is correct regardless of the server's timezone.
+    """
+    if dt is None:
+        return None
+    return dt.astimezone(_EASTERN)
 
 
 def feed_urls_for_routes(routes: Iterable[str]) -> set[str]:
     """Return the set of feed URLs needed to cover ``routes``.
 
-    Raises :class:`KeyError` (via a clear message) if a route is unknown, so a
+    Raises :class:`ValueError` (with a clear message) if a route is unknown, so a
     typo in config surfaces loudly rather than silently fetching nothing.
     """
     urls: set[str] = set()
@@ -124,7 +141,7 @@ def feed_urls_for_routes(routes: Iterable[str]) -> set[str]:
         try:
             group = ROUTE_TO_FEED[route]
         except KeyError:
-            raise KeyError(
+            raise ValueError(
                 f"Unknown subway route {route!r}; known routes: {sorted(ROUTE_TO_FEED)}"
             ) from None
         urls.add(FEED_URLS[group])
@@ -151,6 +168,9 @@ def parse_feed(raw: bytes) -> NYCTFeed:
     """
     # fetch_immediately=False so nyct-gtfs does not hit the network; the URL is a
     # placeholder that is never fetched because we supply the bytes ourselves.
+    # Note (#6): constructing NYCTFeed reloads the bundled GTFS-static tables
+    # (trips.txt/stops.txt) from disk each call. A polling loop should build one
+    # NYCTFeed and reuse it via load_gtfs_bytes() rather than rebuilding per poll.
     feed = NYCTFeed("https://placeholder.invalid/gtfs", fetch_immediately=False)
     try:
         feed.load_gtfs_bytes(raw)
@@ -183,9 +203,9 @@ def extract_stop_updates(
                     route_id=trip.route_id,
                     trip_id=trip.trip_id,
                     stop_id=stu.stop_id,
-                    direction=trip.direction,
-                    arrival=stu.arrival,
-                    departure=stu.departure,
+                    direction=stu.stop_id[-1],
+                    arrival=_to_eastern(stu.arrival),
+                    departure=_to_eastern(stu.departure),
                 )
             )
     return updates
@@ -211,7 +231,6 @@ def fetch_stop_updates(
 
 
 def _main(argv: list[str]) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     if not argv:
         print("usage: python -m app.feeds <route> [stop_id]")
         print("example: python -m app.feeds 6 631N")
@@ -221,7 +240,7 @@ def _main(argv: list[str]) -> int:
     stop_id = argv[1] if len(argv) > 1 else None
     try:
         updates = fetch_stop_updates([route], stop_id=stop_id)
-    except (FeedError, KeyError) as exc:
+    except (FeedError, ValueError) as exc:
         print(f"error: {exc}")
         return 1
 

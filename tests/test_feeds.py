@@ -6,7 +6,7 @@ it are absolute and now in the past, the tests assert on structure (routes,
 direction, stop ids) rather than on specific times.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -37,6 +37,9 @@ def test_extract_stop_updates_for_known_stop(numbered_feed):
         # Grand Central northbound is served by the 4/5/6.
         assert u.route_id in {"4", "5", "6"}
         assert isinstance(u.arrival, datetime)
+        # Arrivals are timezone-aware in Eastern time.
+        assert u.arrival.tzinfo is not None
+        assert u.arrival.utcoffset() in {timedelta(hours=-4), timedelta(hours=-5)}
         assert u.trip_id
 
 
@@ -62,7 +65,7 @@ def test_feed_urls_for_routes_dedupes_to_needed_feeds():
 
 
 def test_feed_urls_for_unknown_route_raises():
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError):
         feeds.feed_urls_for_routes(["Q", "ZZ"])
 
 
