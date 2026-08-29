@@ -7,11 +7,14 @@ requires-python = ">=3.12"
 license = { file = "LICENSE" }
 dependencies = [
     "fastapi>=0.115",
+    "httpx>=0.28.1",
+    "nyct-gtfs>=2.1.0",
     "uvicorn>=0.30",
 ]
 
 [dependency-groups]
 dev = [
+    "pytest>=9.1.1",
     "ruff>=0.6",
 ]
 
