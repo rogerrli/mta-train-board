@@ -42,7 +42,9 @@ uv run pytest -q
 2. **Isolate in a worktree.** Start every issue in a fresh git worktree off the
    latest `main`, on branch `issue-<N>-<slug>` — one issue per worktree, one
    issue per branch. Never work an issue directly in the primary checkout, so
-   parallel sessions don't collide. See Branching & dependencies.
+   parallel sessions don't collide — a `PreToolUse` hook
+   (`scripts/hooks/require_worktree.py`) enforces this: edits in the primary
+   checkout are blocked, except `.claude/` config. See Branching & dependencies.
 3. **Implement** to the issue's acceptance criteria — nothing more (see Scope).
 4. **Verify**: ruff clean, mypy clean, `pytest` green. Include real evidence
    (commands + output) — never claim done without running it.
