@@ -27,3 +27,6 @@ data/gtfs-static/
 .idea/
 .vscode/
 *.swp
+
+# Git worktrees created by AI coding sessions (local machine state, not project content)
+.claude/worktrees/
