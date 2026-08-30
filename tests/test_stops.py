@@ -43,7 +43,8 @@ def test_resolve_maps_name_and_lines_to_parent_stop(vendored):
     assert resolved.name == "Hoyt-Schermerhorn Sts"
     assert resolved.line_stops == {"A": "A42", "C": "A42"}
     assert resolved.lines == ("A", "C")
-    assert resolved.stop_ids() == ["A42N", "A42N"]
+    # A and C share parent A42, so the concrete stop is listed once.
+    assert resolved.stop_ids() == ["A42N"]
 
 
 def test_resolve_filters_unwanted_lines_at_shared_platform(vendored):
@@ -64,6 +65,14 @@ def test_resolve_is_case_and_whitespace_insensitive(vendored):
     resolved = vendored.resolve("  hoyt   st ", ["2"], ["N"])
     assert resolved.name == "Hoyt St"  # canonical spelling returned
     assert resolved.line_stops == {"2": "233"}
+
+
+def test_duplicate_lines_and_directions_are_deduped():
+    index = StopIndex.from_text(SMALL)
+    resolved = index.resolve("DeKalb Av", ["Q", "Q", "R"], ["N", "N"])
+    assert resolved.lines == ("Q", "R")
+    assert resolved.directions == ("N",)
+    assert resolved.watches() == [("Q", "N", "R30N"), ("R", "N", "R30N")]
 
 
 def test_watches_enumerates_line_x_direction():
@@ -137,7 +146,7 @@ def test_resolve_stations_requires_at_least_one_station():
 # --- auto-redownload fallback (network mocked) -------------------------------
 
 
-def test_auto_redownload_retries_and_succeeds(monkeypatch):
+def test_auto_redownload_retries_and_succeeds(monkeypatch, tmp_path):
     # Start from stale data that lacks the station...
     stale = StopIndex.from_text(_csv("233,Hoyt St,2 3"))
     # ...and have the "download" return fresh data that includes it.
@@ -149,12 +158,51 @@ def test_auto_redownload_retries_and_succeeds(monkeypatch):
         return fresh_csv
 
     monkeypatch.setattr(stops, "download_stations_csv", fake_download)
+    # Persist to a throwaway path, not the real vendored file.
+    monkeypatch.setattr(stops, "VENDORED_STATIONS", tmp_path / "stations.csv")
 
     config = {"stations": [{"name": "DeKalb Av", "lines": ["Q"], "directions": ["N"]}]}
     resolved = stops.resolve_stations(config, index=stale, allow_refresh=True)
 
     assert calls["n"] == 1  # downloaded exactly once
     assert resolved[0].line_stops == {"Q": "R30"}
+
+
+def test_auto_redownload_persists_fresh_data(monkeypatch, tmp_path):
+    # The heal should overwrite the vendored file so the next boot skips it.
+    dest = tmp_path / "stations.csv"
+    dest.write_text(_csv("233,Hoyt St,2 3"), encoding="utf-8")  # stale on disk
+    monkeypatch.setattr(stops, "VENDORED_STATIONS", dest)
+    fresh_csv = _csv("233,Hoyt St,2 3", "R30,DeKalb Av,B Q R")
+    monkeypatch.setattr(stops, "download_stations_csv", lambda *a, **k: fresh_csv)
+
+    stale = StopIndex.from_text(dest.read_text(encoding="utf-8"))
+    config = {"stations": [{"name": "DeKalb Av", "lines": ["Q"], "directions": ["N"]}]}
+    stops.resolve_stations(config, index=stale, allow_refresh=True)
+
+    assert dest.read_text(encoding="utf-8") == fresh_csv  # persisted
+
+
+def test_auto_redownload_retry_passes_config_errors_through(monkeypatch, tmp_path):
+    # First station is unknown (triggers refresh); a later station has a bad
+    # direction. After the refresh the first resolves, the second raises a plain
+    # config error that must NOT be re-labeled as a stale-data / refresh failure.
+    stale = StopIndex.from_text(_csv("233,Hoyt St,2 3"))
+    fresh_csv = _csv("233,Hoyt St,2 3", "R30,DeKalb Av,B Q R")
+    monkeypatch.setattr(stops, "download_stations_csv", lambda *a, **k: fresh_csv)
+    # Persist to a throwaway path, not the real vendored file.
+    monkeypatch.setattr(stops, "VENDORED_STATIONS", tmp_path / "stations.csv")
+
+    config = {
+        "stations": [
+            {"name": "DeKalb Av", "lines": ["Q"], "directions": ["N"]},
+            {"name": "Hoyt St", "lines": ["2"], "directions": ["E"]},
+        ]
+    }
+    with pytest.raises(StationResolutionError) as exc:
+        stops.resolve_stations(config, index=stale, allow_refresh=True)
+    assert exc.value.stale_data_plausible is False
+    assert "refresh" not in str(exc.value).lower()
 
 
 def test_auto_redownload_failure_reports_attempt(monkeypatch):

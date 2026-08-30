@@ -51,7 +51,7 @@ VENDORED_STATIONS = _DATA_DIR / "stations.csv"
 # fallback below.
 STATIONS_URL = "https://data.ny.gov/api/views/39hk-dx4f/rows.csv?accessType=DOWNLOAD"
 
-DOWNLOAD_TIMEOUT = 30.0
+DOWNLOAD_TIMEOUT = 10.0
 
 VALID_DIRECTIONS = ("N", "S")
 
@@ -112,8 +112,12 @@ class ResolvedStation:
         ]
 
     def stop_ids(self) -> list[str]:
-        """Return the concrete, direction-suffixed stop IDs to watch."""
-        return [stop_id for _, _, stop_id in self.watches()]
+        """Return the concrete, direction-suffixed stop IDs to watch.
+
+        Order-preserving and de-duplicated: lines that share one parent stop
+        (e.g. A and C both at ``A42``) yield that stop ID only once.
+        """
+        return list(dict.fromkeys(stop_id for _, _, stop_id in self.watches()))
 
 
 class StopIndex:
@@ -157,6 +161,11 @@ class StopIndex:
         Raises :class:`StationResolutionError` on an unknown name, a requested
         line not served there, an ambiguous match, or a bad direction.
         """
+        # De-duplicate (order-preserving) so a copy-paste like
+        # directions=["N", "N"] doesn't produce duplicate watches.
+        directions = list(dict.fromkeys(directions))
+        lines = list(dict.fromkeys(lines))
+
         bad_dirs = [d for d in directions if d not in VALID_DIRECTIONS]
         if bad_dirs or not directions:
             raise StationResolutionError(
@@ -296,7 +305,8 @@ def resolve_stations(
             STATIONS_URL,
         )
         try:
-            fresh_index = StopIndex.from_text(download_stations_csv())
+            fresh_text = download_stations_csv()
+            fresh_index = StopIndex.from_text(fresh_text)
         except Exception as download_error:
             raise StationResolutionError(
                 f"{first_error} (a one-shot refresh of the static station data "
@@ -304,13 +314,31 @@ def resolve_stations(
                 stale_data_plausible=first_error.stale_data_plausible,
             ) from download_error
 
+        # Persist the fresh data over the vendored file so the heal is one-time:
+        # the next startup reads the fresh file and skips the re-download. A
+        # write failure (e.g. read-only fs) only downgrades to an in-memory heal.
+        try:
+            VENDORED_STATIONS.parent.mkdir(parents=True, exist_ok=True)
+            VENDORED_STATIONS.write_text(fresh_text, encoding="utf-8")
+        except OSError as write_error:
+            logger.warning(
+                "Could not persist refreshed station data to %s (%s); healing "
+                "in memory for this run only.",
+                VENDORED_STATIONS,
+                write_error,
+            )
+
         try:
             resolved = _resolve_all(fresh_index, station_cfgs)
         except StationResolutionError as retry_error:
+            # A later station's plain config error (e.g. bad direction) is not a
+            # stale-data problem; surface it as-is rather than blaming the refresh.
+            if not retry_error.stale_data_plausible:
+                raise
             raise StationResolutionError(
                 f"{retry_error} (a one-shot refresh of the static station data "
                 f"was attempted but the station still did not resolve).",
-                stale_data_plausible=retry_error.stale_data_plausible,
+                stale_data_plausible=True,
             ) from retry_error
 
         logger.warning("Re-download succeeded; stations resolved after refresh.")
