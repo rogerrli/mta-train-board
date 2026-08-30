@@ -40,7 +40,8 @@ from nyct_gtfs import NYCTFeed
 
 # The MTA subway system runs on Eastern time; feed timestamps are Unix epochs
 # that nyct-gtfs decodes into naive host-local datetimes (see _to_eastern).
-_EASTERN = ZoneInfo("America/New_York")
+# Public so downstream modules (e.g. app.arrivals) share this one definition.
+EASTERN = ZoneInfo("America/New_York")
 
 # Base URL for the MTA GTFS-Realtime subway feeds. No API key required.
 _FEED_BASE = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds"
@@ -107,6 +108,8 @@ class StopUpdate:
     that same "N"/"S" suffix pulled out for convenience. ``arrival``/``departure``
     are timezone-aware America/New_York datetimes and may be ``None`` (the feed
     omits arrival at an origin terminal and departure at a destination terminal).
+    ``headsign`` is the trip's destination text (e.g. ``"238 St"``), the terminal
+    label used by the arrivals model (#4); it may be ``None`` if the feed omits it.
     """
 
     route_id: str
@@ -115,6 +118,7 @@ class StopUpdate:
     direction: str
     arrival: datetime | None
     departure: datetime | None
+    headsign: str | None
 
 
 def _to_eastern(dt: datetime | None) -> datetime | None:
@@ -127,7 +131,7 @@ def _to_eastern(dt: datetime | None) -> datetime | None:
     """
     if dt is None:
         return None
-    return dt.astimezone(_EASTERN)
+    return dt.astimezone(EASTERN)
 
 
 def feed_urls_for_routes(routes: Iterable[str]) -> set[str]:
@@ -206,6 +210,7 @@ def extract_stop_updates(
                     direction=stu.stop_id[-1],
                     arrival=_to_eastern(stu.arrival),
                     departure=_to_eastern(stu.departure),
+                    headsign=trip.headsign_text,
                 )
             )
     return updates
