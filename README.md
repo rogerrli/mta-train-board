@@ -59,18 +59,55 @@ This creates a virtualenv and installs the app plus dev dependencies from
 ### Run the dev server
 
 ```sh
-uv run uvicorn app.server:app --reload
+uv run uvicorn app.server:app --reload --host 127.0.0.1
 ```
 
-Then check the health endpoint:
+Bind to `127.0.0.1` so the board is reachable only from the local device.
+
+The server exposes a small local JSON API and serves the frontend from the same
+origin, so the device runs a single process:
+
+- **`GET /api/state`** — the whole board in one atomic payload: watched stations
+  with their upcoming arrivals (grouped by line + direction), plus `alerts` and
+  an `updated_at` timestamp. The UI polls this one endpoint.
+- **`GET /api/health`** — liveness check, `{"status":"ok"}`.
+- **`GET /`** — the static frontend (`frontend/`, built in a later issue).
 
 ```sh
-curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/api/health
 # {"status":"ok"}
+
+curl http://127.0.0.1:8000/api/state
 ```
 
-The arrivals endpoints land in later issues; for now the server just exposes
-`/health` so a fresh clone can confirm everything runs.
+`/api/state` shape:
+
+```json
+{
+  "updated_at": "2026-08-29T21:59:10-04:00",
+  "stations": [
+    {
+      "name": "DeKalb Av",
+      "arrivals": [
+        {
+          "line": "Q",
+          "direction": "N",
+          "direction_label": "Northbound",
+          "color": "#FCCC0A",
+          "arrivals": [
+            {"minutes": 6, "arrival": "...", "trip_id": "...", "headsign": "..."}
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": []
+}
+```
+
+`alerts` is an empty placeholder until service alerts land (issue #13). The
+endpoint fetches the live feeds per request for now; background polling with
+caching is issue #6.
 
 ### Configuration
 
