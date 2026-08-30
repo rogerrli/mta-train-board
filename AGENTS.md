@@ -39,7 +39,10 @@ uv run pytest -q
    choice, data source, scope boundary, UX). Ask as **selectable
    multiple-choice questions with a recommended option**, not open-ended walls
    of text. Don't build on unstated assumptions.
-2. **Branch** `issue-<N>-<slug>` off the latest `main`. One issue per branch.
+2. **Isolate in a worktree.** Start every issue in a fresh git worktree off the
+   latest `main`, on branch `issue-<N>-<slug>` — one issue per worktree, one
+   issue per branch. Never work an issue directly in the primary checkout, so
+   parallel sessions don't collide. See Branching & dependencies.
 3. **Implement** to the issue's acceptance criteria — nothing more (see Scope).
 4. **Verify**: ruff clean, mypy clean, `pytest` green. Include real evidence
    (commands + output) — never claim done without running it.
@@ -55,6 +58,10 @@ uv run pytest -q
 
 ## Branching & dependencies
 
+- **Every issue gets its own worktree** off `main` (step 2). Create it with
+  `git worktree add ../<slug> -b issue-<N>-<slug> main` (or the session's
+  worktree tooling), and remove it after the PR merges — don't leave stale or
+  locked worktrees behind.
 - Many issues depend on earlier ones. **A dependent issue waits until its
   parent has been merged to `main`**, then branches off the updated `main`.
 - Don't stack on an unmerged branch unless the owner asks.
