@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Re-download the MTA Subway Stations static dataset and update the vendored CSV.
+
+Run it with uv so httpx (and the app package) are importable:
+
+    uv run scripts/refresh-stops
+
+This overwrites app/data/stations.csv in place. The download is validated
+(parsed) before it replaces the existing file, so a bad response never clobbers
+good vendored data. Commit the updated CSV afterwards if it changed.
+"""
+
+from app.stops import STATIONS_URL, refresh_vendored_stations
+
+
+def main() -> int:
+    print(f"Downloading MTA Subway Stations dataset from {STATIONS_URL} ...")
+    path = refresh_vendored_stations()
+    print(f"Wrote {path} ({path.stat().st_size} bytes).")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
