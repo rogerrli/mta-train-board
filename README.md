@@ -68,8 +68,10 @@ The server exposes a small local JSON API and serves the frontend from the same
 origin, so the device runs a single process:
 
 - **`GET /api/state`** — the whole board in one atomic payload: watched stations
-  with their upcoming arrivals (grouped by line + direction), plus `alerts` and
-  an `updated_at` timestamp. The UI polls this one endpoint.
+  with their upcoming arrivals (grouped by line + direction), plus `alerts`, an
+  `updated_at` timestamp (the last successful feed poll), and `stale`/
+  `age_seconds` staleness flags. Served from the background cache, so it answers
+  instantly. The UI polls this one endpoint.
 - **`GET /api/health`** — liveness check, `{"status":"ok"}`.
 - **`GET /`** — the static frontend (`frontend/`, built in a later issue).
 
@@ -85,6 +87,8 @@ curl http://127.0.0.1:8000/api/state
 ```json
 {
   "updated_at": "2026-08-29T21:59:10-04:00",
+  "stale": false,
+  "age_seconds": 12,
   "stations": [
     {
       "name": "DeKalb Av",
@@ -105,9 +109,11 @@ curl http://127.0.0.1:8000/api/state
 }
 ```
 
-`alerts` is an empty placeholder until service alerts land (issue #13). The
-endpoint fetches the live feeds per request for now; background polling with
-caching is issue #6.
+`alerts` is an empty placeholder until service alerts land (issue #13). A
+background task polls the feeds every `refresh_interval_seconds` and caches the
+board; the endpoint serves that cache (never a live per-request fetch). On a feed
+outage the last-known board keeps being served, flagged `stale` once older than
+`stale_after_seconds`; before the first successful poll the endpoint returns 503.
 
 ### Configuration
 
@@ -118,7 +124,8 @@ stop IDs from vendored MTA static data (`app/data/stations.csv`).
 `config.example.toml` is committed and documents the schema:
 
 ```toml
-refresh_interval_seconds = 30
+refresh_interval_seconds = 30   # feed poll + UI refresh cadence, seconds
+stale_after_seconds = 90        # flag the board `stale` past this age
 walk_best_case_delta_minutes = 1 # best case is this many min faster than walk_minutes
 
 [[stations]]

@@ -4,8 +4,15 @@
 # `config.local.toml` is gitignored so your personal settings stay local.
 # If no `config.local.toml` exists, the app falls back to this example.
 
-# How often the frontend should refresh the board, in seconds.
+# How often the frontend should refresh the board, in seconds. The backend also
+# polls the MTA feeds on this interval and caches the result (issue #6), so the
+# API answers instantly instead of fetching live per request.
 refresh_interval_seconds = 30
+
+# How old cached data may get (seconds) before the API flags the board `stale` so
+# the UI can show "data is old". Defaults to ~3x the refresh interval. During a
+# feed outage the last-known board keeps being served, flagged stale past this.
+stale_after_seconds = 90
 
 # Best-case walk is this many minutes faster than a station's (worst-case)
 # walk_minutes. It sets the "HURRY" band: a train arriving within this many

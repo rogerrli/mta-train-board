@@ -1,11 +1,12 @@
 """Tests for app.server -- the local HTTP/JSON API. Fully offline.
 
 ``build_state`` is exercised as a pure function. The endpoints are driven through
-FastAPI's TestClient with ``fetch_arrivals`` monkeypatched, so no network or live
-feeds are touched.
+FastAPI's TestClient with the poller's cache set directly. The client fixture
+does *not* enter the app's lifespan (no ``with`` block), so the background poll
+task never starts and no network or live feeds are touched.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -13,8 +14,7 @@ from fastapi.testclient import TestClient
 
 from app import server
 from app.arrivals import Arrival, ArrivalGroup
-from app.feeds import FeedError
-from app.stops import StationResolutionError
+from app.poller import Snapshot
 
 EASTERN = ZoneInfo("America/New_York")
 NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=EASTERN)
@@ -44,6 +44,14 @@ def _group(station, line, direction, arrivals, color="#FCCC0A"):
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(server.app)
+
+
+@pytest.fixture(autouse=True)
+def reset_cache():
+    """Isolate each test: clear the shared poller cache before and after."""
+    server.poller._snapshot = None
+    yield
+    server.poller._snapshot = None
 
 
 # --- build_state (pure) ------------------------------------------------------
@@ -83,7 +91,19 @@ def test_build_state_nests_groups_under_their_station():
 
 def test_build_state_empty_when_no_groups():
     payload = server.build_state([], NOW)
-    assert payload == {"updated_at": NOW.isoformat(), "stations": [], "alerts": []}
+    assert payload == {
+        "updated_at": NOW.isoformat(),
+        "stale": False,
+        "age_seconds": 0,
+        "stations": [],
+        "alerts": [],
+    }
+
+
+def test_build_state_passes_through_staleness():
+    payload = server.build_state([], NOW, stale=True, age_seconds=125)
+    assert payload["stale"] is True
+    assert payload["age_seconds"] == 125
 
 
 # --- endpoints ---------------------------------------------------------------
@@ -95,9 +115,10 @@ def test_health(client: TestClient):
     assert resp.json() == {"status": "ok"}
 
 
-def test_state_returns_current_arrivals(client: TestClient, monkeypatch):
+def test_state_serves_fresh_cache(client: TestClient):
     groups = [_group("DeKalb Av", "Q", "N", [_arrival(3)])]
-    monkeypatch.setattr(server, "fetch_arrivals", lambda *a, **k: groups)
+    # A snapshot polled just now -> not stale.
+    server.poller._snapshot = Snapshot(groups=groups, updated_at=datetime.now(EASTERN))
 
     resp = client.get("/api/state")
     assert resp.status_code == 200
@@ -105,26 +126,27 @@ def test_state_returns_current_arrivals(client: TestClient, monkeypatch):
     assert body["stations"][0]["name"] == "DeKalb Av"
     assert body["stations"][0]["arrivals"][0]["arrivals"][0]["minutes"] == 3
     assert body["alerts"] == []
+    assert body["stale"] is False
+    assert body["age_seconds"] < server.poller.stale_after_seconds
     assert "updated_at" in body
 
 
-@pytest.mark.parametrize(
-    "exc",
-    [
-        FeedError("feed down"),
-        StationResolutionError("Unknown station 'Nowhere'"),
-        ValueError("Unknown subway route 'X'"),
-    ],
-)
-def test_state_returns_503_on_upstream_error(client: TestClient, monkeypatch, exc):
-    def boom(*a, **k):
-        raise exc
+def test_state_flags_stale_when_cache_is_old(client: TestClient):
+    old = datetime.now(EASTERN) - timedelta(
+        seconds=server.poller.stale_after_seconds + 60
+    )
+    server.poller._snapshot = Snapshot(groups=[], updated_at=old)
 
-    monkeypatch.setattr(server, "fetch_arrivals", boom)
+    body = client.get("/api/state").json()
+    assert body["stale"] is True
+    assert body["age_seconds"] >= server.poller.stale_after_seconds
 
+
+def test_state_returns_503_before_first_poll(client: TestClient):
+    # Cold start: the cache is empty (reset_cache fixture leaves it None).
     resp = client.get("/api/state")
     assert resp.status_code == 503
-    # A stable, generic message -- the raw exception text is not leaked to clients.
+    # A stable, generic message -- no internal detail leaked to clients.
     assert resp.json()["detail"] == "Arrivals are temporarily unavailable."
 
 

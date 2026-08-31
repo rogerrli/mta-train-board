@@ -11,15 +11,19 @@ Run the dev server (bind to localhost only for a local device):
 
     uv run uvicorn app.server:app --reload --host 127.0.0.1
 
-Scope note (#5): this only shapes and serves the computed arrivals. It fetches
-the live feeds per request for now; the background poll + cache is issue #6.
-Service alerts are issue #13 (the ``alerts`` slot is an empty placeholder here),
-and richer stale/offline error states are issue #14.
+Scope note: this only shapes and serves the computed arrivals. A background
+:class:`~app.poller.Poller` (issue #6) refreshes the board on an interval and
+``/api/state`` answers from that cache -- ``updated_at`` is the last successful
+poll and the payload carries ``stale``/``age_seconds`` so the UI can show "data
+is old". Service alerts are issue #13 (the ``alerts`` slot is an empty
+placeholder here), and richer stale/offline error states are issue #14.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -28,10 +32,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.arrivals import Arrival, ArrivalGroup, fetch_arrivals
-from app.config import load_config
-from app.feeds import EASTERN, FeedError
-from app.stops import StationResolutionError
+from app.arrivals import Arrival, ArrivalGroup
+from app.feeds import EASTERN
+from app.poller import Poller
 
 # The built frontend lives here (issue #7 fills it in). A placeholder index.html
 # ships so same-origin serving works from a fresh clone today.
@@ -39,7 +42,22 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="MTA Train Board")
+# The background poller (issue #6) owns the arrivals cache the API serves. One
+# instance for the process; its task is started/stopped by the lifespan below.
+poller = Poller.from_config()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Run the background poll task for the life of the server process."""
+    poller.start()
+    try:
+        yield
+    finally:
+        await poller.stop()
+
+
+app = FastAPI(title="MTA Train Board", lifespan=lifespan)
 
 # This runs on a single local device. The frontend is served same-origin (no CORS
 # needed for it), but allow any localhost dev server (e.g. a Vite port) to call the
@@ -62,12 +80,20 @@ def _serialize_arrival(a: Arrival) -> dict[str, Any]:
     }
 
 
-def build_state(groups: list[ArrivalGroup], updated_at: datetime) -> dict[str, Any]:
+def build_state(
+    groups: list[ArrivalGroup],
+    updated_at: datetime,
+    *,
+    stale: bool = False,
+    age_seconds: int = 0,
+) -> dict[str, Any]:
     """Shape computed arrival groups into the ``/api/state`` payload.
 
     Arrival groups are nested under their station (config order preserved) so the
-    board UI can render station by station. ``alerts`` is an empty placeholder
-    until service alerts land in issue #13. Pure and offline -- unit-testable.
+    board UI can render station by station. ``updated_at`` is the last successful
+    poll time; ``stale``/``age_seconds`` (issue #6) let the UI flag old data.
+    ``alerts`` is an empty placeholder until service alerts land in issue #13.
+    Pure and offline -- unit-testable.
     """
     # Insertion-ordered dict groups by station while preserving config order.
     stations: dict[str, dict[str, Any]] = {}
@@ -84,6 +110,8 @@ def build_state(groups: list[ArrivalGroup], updated_at: datetime) -> dict[str, A
         )
     return {
         "updated_at": updated_at.isoformat(),
+        "stale": stale,
+        "age_seconds": age_seconds,
         "stations": list(stations.values()),
         "alerts": [],  # TODO(#13): service alerts for the watched lines.
     }
@@ -97,22 +125,27 @@ def health() -> dict[str, str]:
 
 @app.get("/api/state")
 def state() -> dict[str, Any]:
-    """Return the whole board as one JSON payload (stations -> arrivals)."""
-    # TODO(#6): serve from the background poll cache instead of resolving stations
-    # and fetching the live feeds on every request (fine for a wall board, not at
-    # scale). updated_at is the compute time; #6 makes it the last successful poll.
-    now = datetime.now(EASTERN)
-    try:
-        groups = fetch_arrivals(load_config(), now=now)
-    except (FeedError, StationResolutionError, ValueError) as exc:
-        # Log the real cause server-side; return a stable, generic message rather
-        # than leaking internal detail across the API boundary.
-        # TODO(#14): richer stale/offline UX (serve last-known board when stale).
-        logger.warning("Could not build /api/state: %s", exc)
+    """Return the whole board as one JSON payload (stations -> arrivals).
+
+    Served from the background poller's cache, so it answers instantly and never
+    fetches live per request. Until the first poll succeeds the cache is empty and
+    we return 503; after that we always serve the last-known board, flagged
+    ``stale`` once it ages past the configured threshold (issue #6).
+    """
+    snapshot = poller.snapshot
+    if snapshot is None:
+        # No successful poll yet (cold start or a sustained outage from boot).
+        # TODO(#14): richer stale/offline UX at the frontend.
         raise HTTPException(
             status_code=503, detail="Arrivals are temporarily unavailable."
-        ) from exc
-    return build_state(groups, now)
+        )
+    now = datetime.now(EASTERN)
+    return build_state(
+        snapshot.groups,
+        snapshot.updated_at,
+        stale=poller.is_stale(snapshot, now=now),
+        age_seconds=int(poller.age_seconds(snapshot, now=now)),
+    )
 
 
 # The built frontend (issue #7) is served from the same origin so the device runs
