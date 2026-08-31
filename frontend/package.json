@@ -1,0 +1,18 @@
+{
+  "name": "mta-train-board-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Fullscreen glanceable NYC subway arrivals board (issue #7). Built with Vite + Svelte; the Python server (app/server.py) serves the built dist/.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "svelte": "^5.19.0",
+    "vite": "^6.0.7"
+  }
+}

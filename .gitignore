@@ -22,6 +22,10 @@ config.local.*
 .cache/
 data/gtfs-static/
 
+# Frontend (Vite/Svelte). Built assets (frontend/dist) are already covered by the
+# dist/ rule above; the Pi builds them at deploy time (npm ci && npm run build).
+node_modules/
+
 # Editor / OS
 .DS_Store
 .idea/

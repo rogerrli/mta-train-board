@@ -2,19 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Kiosk board: fixed to the target rotated-landscape panel, no user zoom. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
     <title>MTA Train Board</title>
   </head>
   <body>
-    <!--
-      Placeholder frontend. The fullscreen glanceable arrivals board is issue #7;
-      it replaces the contents of this frontend/ directory. Served same-origin by
-      app/server.py so the device runs a single process.
-    -->
-    <main>
-      <h1>MTA Train Board</h1>
-      <p>Backend is running. The board UI ships in issue&nbsp;#7.</p>
-      <p>Live data: <a href="/api/state">/api/state</a> &middot; Health: <a href="/api/health">/api/health</a></p>
-    </main>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>

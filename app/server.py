@@ -30,15 +30,17 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.arrivals import Arrival, ArrivalGroup
 from app.feeds import EASTERN
 from app.poller import Poller
 
-# The built frontend lives here (issue #7 fills it in). A placeholder index.html
-# ships so same-origin serving works from a fresh clone today.
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+# The board (issue #7) is a Vite + Svelte app whose built output lands in
+# frontend/dist. dist/ is gitignored and built at deploy time
+# (``npm ci && npm run build`` in frontend/), so the Pi runs no Node at runtime.
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +79,10 @@ def _serialize_arrival(a: Arrival) -> dict[str, Any]:
         "arrival": a.arrival.isoformat(),
         "trip_id": a.trip_id,
         "headsign": a.headsign,
+        # Walk-time class from issue #8 (CATCHABLE/HURRY/MISSED, or null when the
+        # station has no walk_minutes). The board styles urgency off this and
+        # recomputes it every second from ``arrival`` between polls (issue #8).
+        "catchability": a.catchability,
     }
 
 
@@ -86,12 +92,14 @@ def build_state(
     *,
     stale: bool = False,
     age_seconds: int = 0,
+    refresh_interval_seconds: float = 30.0,
 ) -> dict[str, Any]:
     """Shape computed arrival groups into the ``/api/state`` payload.
 
     Arrival groups are nested under their station (config order preserved) so the
     board UI can render station by station. ``updated_at`` is the last successful
     poll time; ``stale``/``age_seconds`` (issue #6) let the UI flag old data.
+    ``refresh_interval_seconds`` tells the board how often to re-poll this endpoint.
     ``alerts`` is an empty placeholder until service alerts land in issue #13.
     Pure and offline -- unit-testable.
     """
@@ -105,6 +113,9 @@ def build_state(
                 "direction": g.direction,
                 "direction_label": g.direction_label,
                 "color": g.color,
+                # Station walk time behind each arrival's catchability (issue #8),
+                # so the board can reclassify between polls; null when unconfigured.
+                "walk_minutes": g.walk_minutes,
                 "arrivals": [_serialize_arrival(a) for a in g.arrivals],
             }
         )
@@ -112,6 +123,7 @@ def build_state(
         "updated_at": updated_at.isoformat(),
         "stale": stale,
         "age_seconds": age_seconds,
+        "refresh_interval_seconds": refresh_interval_seconds,
         "stations": list(stations.values()),
         "alerts": [],  # TODO(#13): service alerts for the watched lines.
     }
@@ -145,10 +157,29 @@ def state() -> dict[str, Any]:
         snapshot.updated_at,
         stale=poller.is_stale(snapshot, now=now),
         age_seconds=int(poller.age_seconds(snapshot, now=now)),
+        refresh_interval_seconds=poller.refresh_seconds,
     )
 
 
-# The built frontend (issue #7) is served from the same origin so the device runs
-# one process. Mounted last so the /api/* routes above take precedence; html=True
-# serves index.html at "/".
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+# The built board is served from the same origin so the device runs one process.
+# Mounted last so the /api/* routes above take precedence; html=True serves
+# index.html at "/". If dist/ isn't built yet (fresh clone, no `npm run build`),
+# serve a short hint at "/" instead of failing to boot -- StaticFiles raises on a
+# missing directory, and the API must still come up.
+if (FRONTEND_DIST / "index.html").is_file():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+else:
+    logger.warning(
+        "Board not built (%s missing); serving a build hint at /. "
+        "Run `npm ci && npm run build` in frontend/.",
+        FRONTEND_DIST / "index.html",
+    )
+
+    @app.get("/", response_class=HTMLResponse)
+    def _frontend_not_built() -> str:
+        return (
+            "<!doctype html><meta charset=utf-8><title>MTA Train Board</title>"
+            "<h1>MTA Train Board</h1><p>The board isn't built yet. Run "
+            "<code>npm ci &amp;&amp; npm run build</code> in <code>frontend/</code>, "
+            "then reload.</p><p>API: <a href=/api/state>/api/state</a></p>"
+        )

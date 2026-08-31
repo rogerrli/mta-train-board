@@ -1,0 +1,45 @@
+/* Fullscreen glanceable board. Dark, high-contrast, tuned for the target
+   rotated-landscape panel (~1280x720) read from a few feet away. Type scales with
+   the viewport (vw/vh units + clamp) so it stays legible on the real panel and in
+   a dev browser without hard-coding one resolution. */
+
+:root {
+  --bg: #0a0b0d;
+  --panel: #16181d;
+  --panel-edge: #24272e;
+  --text: #f5f7fa;
+  --text-dim: #9aa1ad;
+  --text-faint: #5b616c;
+
+  /* Catchability accents (issue #8 labels). */
+  --hurry: #ff4d4d; /* urgent: move now */
+  --calm: #f5f7fa; /* CATCHABLE / unclassified: plenty of time */
+
+  --gap: clamp(0.4rem, 1.2vw, 1rem);
+  font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden; /* kiosk: no scrollbars, board fills the screen */
+}
+
+#app {
+  height: 100vh;
+  width: 100vw;
+}
+
+/* Tabular, non-shifting digits for the ticking countdowns. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
