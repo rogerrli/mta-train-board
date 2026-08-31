@@ -177,6 +177,25 @@ If a configured station fails to resolve in a way stale data could explain (an
 unknown name, or a line not associated with the station), the app also
 re-downloads this dataset once and retries automatically before erroring.
 
+### Travel-time data
+
+Scheduled station-to-station ride durations (`app/travel.py`, used by the
+arrive-by recommendation) come from the MTA **GTFS static** timetable. The full
+`stop_times.txt` is ~36 MB, so we vendor a compact artifact
+(`app/data/travel_times.json.gz`) trimmed to the routes in your config and
+tagged with the feed version + build date. Rebuild it when the timetable
+changes:
+
+```sh
+uv run scripts/refresh-travel-times
+```
+
+Look up a single ride (parent stop IDs + direction, optional `HH:MM`):
+
+```sh
+uv run python -m app.travel R30 R20 Q N 08:30
+```
+
 ### Lint & format
 
 ```sh
