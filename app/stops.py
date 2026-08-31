@@ -93,11 +93,17 @@ class ResolvedStation:
     :meth:`watches` / :meth:`stop_ids`. For subway service the GTFS ``route_id``
     equals the line label, so ``line_stops`` keys double as the routes #4 passes
     to :mod:`app.feeds`.
+
+    ``walk_minutes`` is the (worst-case) walk from home to this station in
+    minutes, or ``None`` when the config block omits it. #4/#8 use it to classify
+    each arrival as catchable / hurry / missed; ``None`` means "unknown", so no
+    arrival is flagged either way.
     """
 
     name: str
     directions: tuple[str, ...]
     line_stops: dict[str, str]
+    walk_minutes: float | None = None
 
     @property
     def lines(self) -> tuple[str, ...]:
@@ -154,13 +160,27 @@ class StopIndex:
         return self._by_name.get(_norm(name), [])
 
     def resolve(
-        self, name: str, lines: list[str], directions: list[str]
+        self,
+        name: str,
+        lines: list[str],
+        directions: list[str],
+        walk_minutes: float | None = None,
     ) -> ResolvedStation:
         """Resolve one station name + lines + directions to concrete stop IDs.
 
         Raises :class:`StationResolutionError` on an unknown name, a requested
-        line not served there, an ambiguous match, or a bad direction.
+        line not served there, an ambiguous match, a bad direction, or a
+        ``walk_minutes`` that is not a non-negative number.
         """
+        if walk_minutes is not None and (
+            isinstance(walk_minutes, bool)
+            or not isinstance(walk_minutes, (int, float))
+            or walk_minutes < 0
+        ):
+            raise StationResolutionError(
+                f"Station {name!r}: walk_minutes must be a non-negative number, "
+                f"got {walk_minutes!r}."
+            )
         # De-duplicate (order-preserving) so a copy-paste like
         # directions=["N", "N"] doesn't produce duplicate watches.
         directions = list(dict.fromkeys(directions))
@@ -210,6 +230,7 @@ class StopIndex:
             name=canonical,
             directions=tuple(directions),
             line_stops=line_stops,
+            walk_minutes=walk_minutes,
         )
 
     def _suggest(self, name: str) -> str:
@@ -269,6 +290,7 @@ def _resolve_all(
             name=cfg.get("name", ""),
             lines=list(cfg.get("lines", [])),
             directions=list(cfg.get("directions", [])),
+            walk_minutes=cfg.get("walk_minutes"),
         )
         for cfg in station_cfgs
     ]

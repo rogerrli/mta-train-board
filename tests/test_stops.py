@@ -86,6 +86,40 @@ def test_watches_enumerates_line_x_direction():
     }
 
 
+# --- walk time (#8) ----------------------------------------------------------
+
+
+def test_resolve_carries_walk_minutes():
+    index = StopIndex.from_text(SMALL)
+    resolved = index.resolve("Hoyt St", ["2"], ["N"], walk_minutes=4)
+    assert resolved.walk_minutes == 4
+
+
+def test_walk_minutes_defaults_to_none_when_omitted():
+    index = StopIndex.from_text(SMALL)
+    assert index.resolve("Hoyt St", ["2"], ["N"]).walk_minutes is None
+
+
+def test_config_walk_minutes_flows_through_resolve_stations():
+    index = StopIndex.from_text(SMALL)
+    config = {
+        "stations": [
+            {"name": "Hoyt St", "lines": ["2"], "directions": ["N"], "walk_minutes": 3}
+        ]
+    }
+    (resolved,) = stops.resolve_stations(config, index=index, allow_refresh=False)
+    assert resolved.walk_minutes == 3
+
+
+@pytest.mark.parametrize("bad", [-1, "5", True])
+def test_bad_walk_minutes_raises_and_is_not_stale_data(bad):
+    index = StopIndex.from_text(SMALL)
+    with pytest.raises(StationResolutionError) as exc:
+        index.resolve("Hoyt St", ["2"], ["N"], walk_minutes=bad)
+    assert exc.value.stale_data_plausible is False
+    assert "walk_minutes" in str(exc.value)
+
+
 # --- error cases -------------------------------------------------------------
 
 

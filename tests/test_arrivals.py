@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from app import arrivals, feeds
 from app.arrivals import Arrival, ArrivalGroup, compute_arrivals
 from app.feeds import StopUpdate
@@ -37,11 +39,18 @@ def _update(
     )
 
 
-def _station(name="DeKalb Av", lines=("Q",), directions=("N",), parent="R30"):
+def _station(
+    name="DeKalb Av",
+    lines=("Q",),
+    directions=("N",),
+    parent="R30",
+    walk_minutes=None,
+):
     return ResolvedStation(
         name=name,
         directions=tuple(directions),
         line_stops={line: parent for line in lines},
+        walk_minutes=walk_minutes,
     )
 
 
@@ -101,6 +110,84 @@ def test_limit_keeps_next_n():
     updates = [_update("Q", "R30N", m, trip=f"t{m}") for m in (1, 2, 3, 4, 5)]
     (group,) = compute_arrivals([station], updates, now=NOW, limit=3)
     assert [a.minutes for a in group.arrivals] == [1, 2, 3]
+
+
+# --- catchability against walk time (#8) -------------------------------------
+
+
+def test_classifies_catchable_hurry_missed_against_walk_time():
+    # W=5, delta=1 -> HURRY band is [4, 5]; >5 catchable, <4 missed.
+    station = _station(walk_minutes=5)
+    updates = [_update("Q", "R30N", m, trip=f"t{m}") for m in (7, 6, 5, 4, 3, 2)]
+    (group,) = compute_arrivals([station], updates, now=NOW, limit=10)
+    got = {a.minutes: a.catchability for a in group.arrivals}
+    assert got == {
+        7: "CATCHABLE",
+        6: "CATCHABLE",
+        5: "HURRY",  # m == W
+        4: "HURRY",  # m == W - delta (lower edge)
+        3: "MISSED",
+        2: "MISSED",
+    }
+
+
+def test_no_walk_time_leaves_catchability_unknown():
+    station = _station(walk_minutes=None)
+    updates = [_update("Q", "R30N", m) for m in (1, 10)]
+    (group,) = compute_arrivals([station], updates, now=NOW)
+    assert all(a.catchability is None for a in group.arrivals)
+    assert group.walk_minutes is None
+
+
+def test_walk_best_case_delta_widens_hurry_band():
+    # delta=3, W=5 -> HURRY band [2, 5]; a 2-min train is HURRY, not MISSED.
+    station = _station(walk_minutes=5)
+    updates = [_update("Q", "R30N", m, trip=f"t{m}") for m in (2, 1)]
+    (group,) = compute_arrivals([station], updates, now=NOW, walk_best_case_delta=3)
+    got = {a.minutes: a.catchability for a in group.arrivals}
+    assert got == {2: "HURRY", 1: "MISSED"}
+
+
+def test_zero_delta_collapses_hurry_to_single_minute():
+    # delta=0 -> HURRY only at exactly m == W.
+    station = _station(walk_minutes=4)
+    updates = [_update("Q", "R30N", m, trip=f"t{m}") for m in (5, 4, 3)]
+    (group,) = compute_arrivals([station], updates, now=NOW, walk_best_case_delta=0)
+    got = {a.minutes: a.catchability for a in group.arrivals}
+    assert got == {5: "CATCHABLE", 4: "HURRY", 3: "MISSED"}
+
+
+def test_group_echoes_walk_minutes():
+    station = _station(walk_minutes=6)
+    (group,) = compute_arrivals([station], [_update("Q", "R30N", 3)], now=NOW)
+    assert group.walk_minutes == 6
+
+
+def test_fractional_walk_minutes_classifies_against_floored_countdowns():
+    # W=4.5, delta=1 -> HURRY band [3.5, 4.5]. Countdowns are whole minutes.
+    station = _station(walk_minutes=4.5)
+    updates = [_update("Q", "R30N", m, trip=f"t{m}") for m in (5, 4, 3)]
+    (group,) = compute_arrivals([station], updates, now=NOW)
+    got = {a.minutes: a.catchability for a in group.arrivals}
+    assert got == {5: "CATCHABLE", 4: "HURRY", 3: "MISSED"}
+
+
+def test_delta_at_least_walk_time_makes_missed_unreachable():
+    # W=3, delta=5 -> W-delta = -2, so every non-catchable train is HURRY;
+    # you can always make it at best-case pace. Nothing is MISSED.
+    station = _station(walk_minutes=3)
+    updates = [_update("Q", "R30N", m, trip=f"t{m}") for m in (4, 3, 0)]
+    (group,) = compute_arrivals([station], updates, now=NOW, walk_best_case_delta=5)
+    got = {a.minutes: a.catchability for a in group.arrivals}
+    assert got == {4: "CATCHABLE", 3: "HURRY", 0: "HURRY"}
+
+
+@pytest.mark.parametrize("bad", [-1, "1", True])
+def test_fetch_arrivals_rejects_bad_delta_before_any_network(bad):
+    # Validation is the first thing fetch_arrivals does, so a bad config value
+    # raises before station resolution or any feed fetch -- no network needed.
+    with pytest.raises(ValueError, match="walk_best_case_delta_minutes"):
+        arrivals.fetch_arrivals({"walk_best_case_delta_minutes": bad})
 
 
 # --- grouping & metadata -----------------------------------------------------
