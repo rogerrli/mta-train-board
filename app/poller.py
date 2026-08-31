@@ -41,6 +41,13 @@ DEFAULT_STALE_AFTER_SECONDS = 90.0  # ~3x refresh; board reads "old" past this.
 DEFAULT_MAX_BACKOFF_SECONDS = 300.0  # cap the retry interval during an outage.
 MIN_REFRESH_SECONDS = 5.0  # floor so a misconfigured interval can't hammer the MTA.
 
+# How many trains per line/direction to keep in the cached board. The glance view
+# (issue #7) only renders the first few, but tapping a train opens a detail
+# breakdown (issue #9) that shows this deeper list -- so the one cached payload
+# already carries enough for both, no extra fetch. Deeper than arrivals'
+# DEFAULT_LIMIT (which the CLI spot-check still uses).
+BOARD_LIMIT = 10
+
 
 @dataclass(frozen=True)
 class Snapshot:
@@ -112,7 +119,10 @@ class Poller:
         # tables from disk every poll (see the note in app/feeds.py:parse_feed).
         # A perf win for the Pi is to build one NYCTFeed and reuse it via
         # load_gtfs_bytes() across polls; deferred to keep this issue in its lane.
-        return Snapshot(groups=fetch_arrivals(load_config(), now=now), updated_at=now)
+        return Snapshot(
+            groups=fetch_arrivals(load_config(), now=now, limit=BOARD_LIMIT),
+            updated_at=now,
+        )
 
     async def _run(self) -> None:
         """Poll loop: refresh on success, back off exponentially on failure."""

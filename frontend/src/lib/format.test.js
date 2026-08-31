@@ -11,7 +11,10 @@ import {
   liveArrivals,
   agoLabel,
   bulletTextColor,
+  catchabilityLabel,
+  clockTime,
   DEFAULT_WALK_DELTA,
+  GLANCE_LIMIT,
 } from "./format.js";
 
 const NOW = Date.UTC(2026, 7, 30, 16, 0, 0); // fixed epoch ms
@@ -89,4 +92,22 @@ test("agoLabel reads naturally across ranges", () => {
 test("bulletTextColor picks a legible contrast per MTA color", () => {
   assert.equal(bulletTextColor("#FCCC0A"), "#000000"); // yellow (NQRW) -> black
   assert.equal(bulletTextColor("#0039A6"), "#ffffff"); // blue (ACE) -> white
+});
+
+test("catchabilityLabel names each band, nothing when unclassified", () => {
+  assert.equal(catchabilityLabel("CATCHABLE"), "Catchable");
+  assert.equal(catchabilityLabel("HURRY"), "Run");
+  assert.equal(catchabilityLabel("MISSED"), "Missed");
+  assert.equal(catchabilityLabel(null), null); // no walk time -> no label
+});
+
+test("clockTime pins the wall clock to New York, not the host's zone", () => {
+  // NOW is 16:00 UTC -> 12:00 in America/New_York (EDT), regardless of TZ.
+  assert.match(clockTime(NOW), /\b12:00\b/);
+});
+
+test("GLANCE_LIMIT is smaller than the cached depth, so the detail shows more", () => {
+  // The board renders GLANCE_LIMIT per row; the server caches BOARD_LIMIT (10)
+  // so tapping a row reveals more without another fetch (issue #9).
+  assert.ok(GLANCE_LIMIT >= 1 && GLANCE_LIMIT < 10);
 });

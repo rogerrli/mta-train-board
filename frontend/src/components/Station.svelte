@@ -2,8 +2,11 @@
   import LineGroup from "./LineGroup.svelte";
 
   // One station card: its name plus each watched line/direction group (the API
-  // nests groups under `arrivals`, config order preserved).
-  let { station, now } = $props();
+  // nests groups under `arrivals`, config order preserved). `onselect(name, i)`
+  // bubbles a tapped group up to the board so it can open the detail overlay
+  // (issue #9); the index disambiguates a line/direction that repeats across
+  // config blocks (see the key note below).
+  let { station, now, onselect } = $props();
 
   // Weight for content-proportional sizing (issue #40): each group contributes
   // its row plus its trains, so a station we watch more heavily claims more of
@@ -24,7 +27,7 @@
          in two config blocks with an overlapping direction, and a duplicate key
          is a hard render error. Group order is config-stable, so the index is. -->
     {#each station.arrivals as group, i (group.line + group.direction + i)}
-      <LineGroup {group} {now} />
+      <LineGroup {group} {now} onselect={() => onselect(station.name, i)} />
     {/each}
   </div>
 </section>

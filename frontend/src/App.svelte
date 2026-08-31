@@ -2,6 +2,7 @@
   import { createBoard } from "./lib/board.js";
   import StatusBar from "./components/StatusBar.svelte";
   import Station from "./components/Station.svelte";
+  import TrainDetail from "./components/TrainDetail.svelte";
 
   const board = createBoard();
 
@@ -18,6 +19,18 @@
   });
 
   const stations = $derived($board.payload?.stations ?? []);
+
+  // Tapped-train detail overlay (issue #9). We remember the selection by station
+  // name + group index, not the group object, then re-derive the live group from
+  // the latest payload each render -- so the overlay ticks and refreshes on every
+  // poll, and closes on its own if a config change drops that group.
+  let selected = $state(null); // { station, index } | null
+
+  const selectedGroup = $derived.by(() => {
+    if (!selected) return null;
+    const s = stations.find((st) => st.name === selected.station);
+    return s?.arrivals[selected.index] ?? null;
+  });
 </script>
 
 <div class="board">
@@ -42,12 +55,25 @@
     {:else}
       <div class="stations">
         {#each stations as station (station.name)}
-          <Station {station} {now} />
+          <Station
+            {station}
+            {now}
+            onselect={(name, index) => (selected = { station: name, index })}
+          />
         {/each}
       </div>
     {/if}
   {/if}
 </div>
+
+{#if selectedGroup}
+  <TrainDetail
+    group={selectedGroup}
+    station={selected.station}
+    {now}
+    onclose={() => (selected = null)}
+  />
+{/if}
 
 <style>
   .board {

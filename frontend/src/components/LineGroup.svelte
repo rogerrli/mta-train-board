@@ -1,20 +1,31 @@
 <script>
-  import { liveArrivals, bulletTextColor, countdownLabel } from "../lib/format.js";
+  import {
+    liveArrivals,
+    bulletTextColor,
+    countdownLabel,
+    GLANCE_LIMIT,
+  } from "../lib/format.js";
 
   // One line + direction: the route bullet, the direction, and the next few
   // countdowns. Minutes and catchability are recomputed every second off the
   // shared `now` clock (issue #8), so trains tick down and cross
   // CATCHABLE -> HURRY -> MISSED between server polls.
-  let { group, now } = $props();
+  //
+  // The whole row is a button: tapping it opens the detail breakdown (issue #9)
+  // via `onselect`. The cached payload carries a deeper list than the glance
+  // shows, so the glance renders only the first GLANCE_LIMIT here and the detail
+  // overlay shows the full group.
+  let { group, now, onselect } = $props();
 
   const arrivals = $derived(liveArrivals(group, now));
+  const glance = $derived(arrivals.slice(0, GLANCE_LIMIT));
   const textColor = $derived(bulletTextColor(group.color));
   // Terminal-station label (#41): show the configured destination + borough,
   // falling back to the compass word ("Northbound") when unconfigured.
   const primary = $derived(group.terminal ?? group.direction_label);
 </script>
 
-<div class="group">
+<button type="button" class="group" onclick={onselect}>
   <span
     class="bullet"
     style="background:{group.color}; color:{textColor}"
@@ -27,10 +38,10 @@
     {#if group.borough}<span class="borough">{group.borough}</span>{/if}
   </span>
   <div class="times">
-    {#if arrivals.length === 0}
+    {#if glance.length === 0}
       <span class="none">No trains</span>
     {:else}
-      {#each arrivals as a, i (a.trip_id)}
+      {#each glance as a, i (a.trip_id)}
         <span
           class="min tnum {a.catchability?.toLowerCase() ?? 'calm'}"
           class:lead={i === 0}
@@ -40,14 +51,42 @@
       {/each}
     {/if}
   </div>
-</div>
+</button>
 
 <style>
+  /* The row is a button (tap -> detail breakdown, issue #9), but it must read as
+     a plain board row: strip the native chrome and inherit type/color. */
   .group {
     display: flex;
     align-items: center;
     gap: clamp(0.4rem, 1vw, 0.8rem);
     min-width: 0;
+    width: 100%;
+    padding: clamp(0.15rem, 0.6vh, 0.4rem) clamp(0.2rem, 0.6vw, 0.5rem);
+    margin: 0;
+    border: none;
+    border-radius: clamp(0.3rem, 0.8vw, 0.6rem);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.12s ease;
+  }
+
+  /* Touch/hover feedback so a tap feels acknowledged on the panel. */
+  .group:active {
+    background: var(--panel-edge);
+  }
+  .group:focus-visible {
+    outline: 2px solid var(--text-dim);
+    outline-offset: 2px;
+  }
+  @media (hover: hover) {
+    .group:hover {
+      background: var(--panel-edge);
+    }
   }
 
   .bullet {
