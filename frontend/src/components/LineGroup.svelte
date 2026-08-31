@@ -1,0 +1,136 @@
+<script>
+  import { liveArrivals, bulletTextColor } from "../lib/format.js";
+
+  // One line + direction: the route bullet, the direction, and the next few
+  // countdowns. Minutes and catchability are recomputed every second off the
+  // shared `now` clock (issue #8), so trains tick down and cross
+  // CATCHABLE -> HURRY -> MISSED between server polls.
+  let { group, now } = $props();
+
+  const arrivals = $derived(liveArrivals(group, now));
+  const textColor = $derived(bulletTextColor(group.color));
+</script>
+
+<div class="group">
+  <span
+    class="bullet"
+    style="background:{group.color}; color:{textColor}"
+    title={group.direction_label}
+  >
+    {group.line}
+  </span>
+  <span class="dir">{group.direction_label}</span>
+  <div class="times">
+    {#if arrivals.length === 0}
+      <span class="none">No trains</span>
+    {:else}
+      {#each arrivals as a, i (a.trip_id)}
+        <span
+          class="min tnum {a.catchability?.toLowerCase() ?? 'calm'}"
+          class:lead={i === 0}
+        >
+          {a.minutes}
+          {#if a.catchability === "HURRY"}<span class="tag">run</span>{/if}
+        </span>
+      {/each}
+      <span class="unit">min</span>
+    {/if}
+  </div>
+</div>
+
+<style>
+  .group {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.4rem, 1vw, 0.8rem);
+    min-width: 0;
+  }
+
+  .bullet {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: clamp(1.6rem, 4.6vh, 3rem);
+    height: clamp(1.6rem, 4.6vh, 3rem);
+    border-radius: 50%;
+    font-weight: 800;
+    font-size: clamp(0.95rem, 2.7vh, 1.7rem);
+    line-height: 1;
+  }
+
+  .dir {
+    flex: none;
+    width: clamp(4.5rem, 12vw, 8rem);
+    color: var(--text-dim);
+    font-size: clamp(0.7rem, 1.8vh, 1.05rem);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .times {
+    display: flex;
+    align-items: baseline;
+    gap: clamp(0.5rem, 1.6vw, 1.2rem);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .min {
+    font-size: clamp(1.4rem, 4.6vh, 3.1rem);
+    font-weight: 800;
+    line-height: 1;
+    color: var(--calm);
+    position: relative;
+  }
+
+  /* The soonest train is the one you act on: make it the biggest thing here. */
+  .min.lead {
+    font-size: clamp(1.9rem, 6.4vh, 4.4rem);
+  }
+
+  /* HURRY: only makeable if you move now. Loud + pulsing. */
+  .min.hurry {
+    color: var(--hurry);
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+
+  .tag {
+    position: absolute;
+    top: -0.35em;
+    right: -1.4em;
+    font-size: 0.28em;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--hurry);
+  }
+
+  /* MISSED: not feasible at walking pace. De-emphasize (owner's #7 call), keep
+     it visible so the pattern of service still reads. */
+  .min.missed {
+    color: var(--text-faint);
+    text-decoration: line-through;
+    text-decoration-thickness: 0.06em;
+    font-weight: 600;
+  }
+
+  .unit {
+    font-size: clamp(0.7rem, 1.8vh, 1.05rem);
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+
+  .none {
+    font-size: clamp(0.9rem, 2.4vh, 1.4rem);
+    color: var(--text-faint);
+    font-style: italic;
+  }
+
+  @keyframes pulse {
+    50% {
+      opacity: 0.45;
+    }
+  }
+</style>

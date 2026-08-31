@@ -20,16 +20,19 @@ EASTERN = ZoneInfo("America/New_York")
 NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=EASTERN)
 
 
-def _arrival(minutes: int, trip: str = "t1", headsign: str = "Uptown") -> Arrival:
+def _arrival(
+    minutes: int, trip: str = "t1", headsign: str = "Uptown", catchability=None
+) -> Arrival:
     return Arrival(
         minutes=minutes,
         arrival=NOW.replace(minute=minutes),
         trip_id=trip,
         headsign=headsign,
+        catchability=catchability,
     )
 
 
-def _group(station, line, direction, arrivals, color="#FCCC0A"):
+def _group(station, line, direction, arrivals, color="#FCCC0A", walk_minutes=None):
     label = {"N": "Northbound", "S": "Southbound"}[direction]
     return ArrivalGroup(
         station=station,
@@ -38,6 +41,7 @@ def _group(station, line, direction, arrivals, color="#FCCC0A"):
         direction_label=label,
         color=color,
         arrivals=arrivals,
+        walk_minutes=walk_minutes,
     )
 
 
@@ -79,6 +83,7 @@ def test_build_state_nests_groups_under_their_station():
     q = dekalb["arrivals"][0]
     assert q["direction_label"] == "Northbound"
     assert q["color"] == "#FCCC0A"
+    assert q["walk_minutes"] is None
     assert [a["minutes"] for a in q["arrivals"]] == [2, 9]
     # Arrival serialization carries the details the UI may use.
     assert q["arrivals"][0] == {
@@ -86,6 +91,7 @@ def test_build_state_nests_groups_under_their_station():
         "arrival": NOW.replace(minute=2).isoformat(),
         "trip_id": "t1",
         "headsign": "Uptown",
+        "catchability": None,
     }
 
 
@@ -95,6 +101,7 @@ def test_build_state_empty_when_no_groups():
         "updated_at": NOW.isoformat(),
         "stale": False,
         "age_seconds": 0,
+        "refresh_interval_seconds": 30.0,
         "stations": [],
         "alerts": [],
     }
@@ -104,6 +111,28 @@ def test_build_state_passes_through_staleness():
     payload = server.build_state([], NOW, stale=True, age_seconds=125)
     assert payload["stale"] is True
     assert payload["age_seconds"] == 125
+
+
+def test_build_state_exposes_catchability_walk_and_refresh():
+    # The board (issue #7) styles urgency off catchability and reclassifies between
+    # polls using walk_minutes; it re-polls on refresh_interval_seconds. Issue #8
+    # added catchability/walk_minutes to the model; this asserts the API exposes
+    # them (they were not serialized before).
+    groups = [
+        _group(
+            "Hoyt-Schermerhorn Sts",
+            "A",
+            "N",
+            [_arrival(2, catchability="HURRY"), _arrival(9, catchability="CATCHABLE")],
+            walk_minutes=3.0,
+        )
+    ]
+    payload = server.build_state(groups, NOW, refresh_interval_seconds=45.0)
+
+    assert payload["refresh_interval_seconds"] == 45.0
+    group = payload["stations"][0]["arrivals"][0]
+    assert group["walk_minutes"] == 3.0
+    assert [a["catchability"] for a in group["arrivals"]] == ["HURRY", "CATCHABLE"]
 
 
 # --- endpoints ---------------------------------------------------------------

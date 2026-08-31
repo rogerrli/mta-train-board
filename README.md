@@ -73,7 +73,7 @@ origin, so the device runs a single process:
   `age_seconds` staleness flags. Served from the background cache, so it answers
   instantly. The UI polls this one endpoint.
 - **`GET /api/health`** — liveness check, `{"status":"ok"}`.
-- **`GET /`** — the static frontend (`frontend/`, built in a later issue).
+- **`GET /`** — the built board UI (`frontend/dist/`; see [The board UI](#the-board-ui)).
 
 ```sh
 curl http://127.0.0.1:8000/api/health
@@ -89,6 +89,7 @@ curl http://127.0.0.1:8000/api/state
   "updated_at": "2026-08-29T21:59:10-04:00",
   "stale": false,
   "age_seconds": 12,
+  "refresh_interval_seconds": 30,
   "stations": [
     {
       "name": "DeKalb Av",
@@ -98,8 +99,12 @@ curl http://127.0.0.1:8000/api/state
           "direction": "N",
           "direction_label": "Northbound",
           "color": "#FCCC0A",
+          "walk_minutes": 6,
           "arrivals": [
-            {"minutes": 6, "arrival": "...", "trip_id": "...", "headsign": "..."}
+            {
+              "minutes": 6, "arrival": "...", "trip_id": "...",
+              "headsign": "...", "catchability": "CATCHABLE"
+            }
           ]
         }
       ]
@@ -109,11 +114,16 @@ curl http://127.0.0.1:8000/api/state
 }
 ```
 
-`alerts` is an empty placeholder until service alerts land (issue #13). A
-background task polls the feeds every `refresh_interval_seconds` and caches the
-board; the endpoint serves that cache (never a live per-request fetch). On a feed
-outage the last-known board keeps being served, flagged `stale` once older than
-`stale_after_seconds`; before the first successful poll the endpoint returns 503.
+`refresh_interval_seconds` tells the board how often to re-poll. Each arrival's
+`catchability` (`CATCHABLE`/`HURRY`/`MISSED`, or `null` when the station has no
+`walk_minutes`) and the group's `walk_minutes` let the board style urgency and
+recompute the countdowns + catchability every second from `arrival` between polls
+(issue #8). `alerts` is an empty placeholder until service alerts land (issue
+#13). A background task polls the feeds every `refresh_interval_seconds` and
+caches the board; the endpoint serves that cache (never a live per-request fetch).
+On a feed outage the last-known board keeps being served, flagged `stale` once
+older than `stale_after_seconds`; before the first successful poll the endpoint
+returns 503.
 
 ### Configuration
 
@@ -186,6 +196,35 @@ uv run ruff format .
 
 CI (`.github/workflows/ci.yml`) runs the ruff lint and format checks on every
 push and pull request.
+
+### The board UI
+
+The fullscreen board is a [Vite](https://vite.dev/) + [Svelte](https://svelte.dev/)
+app in `frontend/`. It's designed for the wall panel in **landscape** (the panels
+are natively portrait, e.g. 720×1280, rotated 90° in software, so the UI targets
+1280×720), with big high-contrast type readable across the room. It polls
+`/api/state` on the configured interval and, between polls, recomputes each
+countdown and its catchability every second from the absolute `arrival` times, so
+trains visibly tick down and cross CATCHABLE → HURRY → MISSED. Trains you can't
+make (MISSED) are shown dimmed and struck through rather than hidden.
+
+Build it (needs Node 20+; only at build time — the Pi serves static files):
+
+```sh
+cd frontend
+npm ci          # or: npm install
+npm run build   # outputs frontend/dist/, which app/server.py serves at "/"
+```
+
+`frontend/dist/` is gitignored; build it after cloning (and on the Pi at deploy
+time). If it isn't built, the server still boots and serves a short build hint at
+`/`. For UI development with hot reload, run the API and the Vite dev server
+side by side — Vite proxies `/api` to the backend:
+
+```sh
+uv run uvicorn app.server:app --reload --host 127.0.0.1  # terminal 1
+cd frontend && npm run dev                                # terminal 2
+```
 
 ## Status
 
