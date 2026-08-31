@@ -21,6 +21,14 @@ export function minutesUntil(arrivalIso, now = Date.now()) {
   return Math.floor((arrivalMs - now) / 60000);
 }
 
+// Display label for a floored countdown. `liveArrivals` already drops departed
+// trains, so `minutes` is >= 0 here; 0 means under a minute out, which reads as
+// a bug as the bare number "0" (and worse in the HURRY band). Show "Due" for it
+// (transit convention), the plain number otherwise.
+export function countdownLabel(minutes) {
+  return minutes < 1 ? "Due" : String(minutes);
+}
+
 // Classify a train `minutes` out against a station's `walkMinutes`. Mirrors the
 // backend's _classify bands (app/arrivals.py). Returns null when no walk time is
 // configured (nothing to flag).

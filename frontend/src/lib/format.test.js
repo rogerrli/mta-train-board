@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import {
   minutesUntil,
   classify,
+  countdownLabel,
   liveArrivals,
   agoLabel,
   bulletTextColor,
@@ -45,6 +46,12 @@ test("classify honors a custom grace window", () => {
   assert.equal(classify(3, 5, 2), "HURRY"); // walk-2 = 3
   assert.equal(classify(2, 5, 2), "MISSED");
   assert.equal(DEFAULT_WALK_DELTA, 1);
+});
+
+test("countdownLabel shows Due under a minute out, the number otherwise", () => {
+  assert.equal(countdownLabel(0), "Due"); // <1 min -> "Due", never "0"
+  assert.equal(countdownLabel(1), "1");
+  assert.equal(countdownLabel(12), "12");
 });
 
 test("liveArrivals drops departed trains and attaches fresh minutes/catchability", () => {
