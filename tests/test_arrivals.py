@@ -40,7 +40,7 @@ def _update(
 
 
 def _station(
-    name="DeKalb Av",
+    name="14 St-Union Sq",
     lines=("Q",),
     directions=("N",),
     parent="R30",
@@ -219,7 +219,7 @@ def test_only_matching_route_and_stop_counted():
 def test_attaches_direction_label_color_and_headsign():
     station = _station(lines=("Q",), directions=("N",))
     (group,) = compute_arrivals([station], [_update("Q", "R30N", 3)], now=NOW)
-    assert group.station == "DeKalb Av"
+    assert group.station == "14 St-Union Sq"
     assert group.direction_label == "Northbound"
     assert group.color == "#FCCC0A"  # N/Q/R/W yellow
     assert group.arrivals[0].headsign == "Uptown Terminal"

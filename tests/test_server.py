@@ -63,9 +63,9 @@ def reset_cache():
 
 def test_build_state_nests_groups_under_their_station():
     groups = [
-        _group("DeKalb Av", "Q", "N", [_arrival(2), _arrival(9)]),
-        _group("DeKalb Av", "R", "S", [_arrival(5)]),
-        _group("Hoyt St", "2", "N", []),
+        _group("14 St-Union Sq", "Q", "N", [_arrival(2), _arrival(9)]),
+        _group("14 St-Union Sq", "R", "S", [_arrival(5)]),
+        _group("Fulton St", "2", "N", []),
     ]
 
     payload = server.build_state(groups, NOW)
@@ -73,7 +73,7 @@ def test_build_state_nests_groups_under_their_station():
     assert payload["updated_at"] == NOW.isoformat()
     assert payload["alerts"] == []
     # Two source stations -> two station entries, config order preserved.
-    assert [s["name"] for s in payload["stations"]] == ["DeKalb Av", "Hoyt St"]
+    assert [s["name"] for s in payload["stations"]] == ["14 St-Union Sq", "Fulton St"]
 
     dekalb = payload["stations"][0]
     assert [(g["line"], g["direction"]) for g in dekalb["arrivals"]] == [
@@ -120,7 +120,7 @@ def test_build_state_exposes_catchability_walk_and_refresh():
     # them (they were not serialized before).
     groups = [
         _group(
-            "Hoyt-Schermerhorn Sts",
+            "Times Sq-42 St",
             "A",
             "N",
             [_arrival(2, catchability="HURRY"), _arrival(9, catchability="CATCHABLE")],
@@ -145,14 +145,14 @@ def test_health(client: TestClient):
 
 
 def test_state_serves_fresh_cache(client: TestClient):
-    groups = [_group("DeKalb Av", "Q", "N", [_arrival(3)])]
+    groups = [_group("14 St-Union Sq", "Q", "N", [_arrival(3)])]
     # A snapshot polled just now -> not stale.
     server.poller._snapshot = Snapshot(groups=groups, updated_at=datetime.now(EASTERN))
 
     resp = client.get("/api/state")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["stations"][0]["name"] == "DeKalb Av"
+    assert body["stations"][0]["name"] == "14 St-Union Sq"
     assert body["stations"][0]["arrivals"][0]["arrivals"][0]["minutes"] == 3
     assert body["alerts"] == []
     assert body["stale"] is False
