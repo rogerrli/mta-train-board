@@ -32,7 +32,16 @@ def _arrival(
     )
 
 
-def _group(station, line, direction, arrivals, color="#FCCC0A", walk_minutes=None):
+def _group(
+    station,
+    line,
+    direction,
+    arrivals,
+    color="#FCCC0A",
+    walk_minutes=None,
+    terminal=None,
+    borough=None,
+):
     label = {"N": "Northbound", "S": "Southbound"}[direction]
     return ArrivalGroup(
         station=station,
@@ -42,6 +51,8 @@ def _group(station, line, direction, arrivals, color="#FCCC0A", walk_minutes=Non
         color=color,
         arrivals=arrivals,
         walk_minutes=walk_minutes,
+        terminal=terminal,
+        borough=borough,
     )
 
 
@@ -133,6 +144,29 @@ def test_build_state_exposes_catchability_walk_and_refresh():
     group = payload["stations"][0]["arrivals"][0]
     assert group["walk_minutes"] == 3.0
     assert [a["catchability"] for a in group["arrivals"]] == ["HURRY", "CATCHABLE"]
+
+
+def test_build_state_exposes_terminal_and_borough():
+    # Terminal-station direction labels (#41): the board renders terminal as the
+    # primary direction text and borough as secondary, falling back to
+    # direction_label when unconfigured (null here).
+    groups = [
+        _group(
+            "14 St-Union Sq",
+            "Q",
+            "N",
+            [_arrival(3)],
+            terminal="96 St-2 Av",
+            borough="Man",
+        ),
+        _group("14 St-Union Sq", "R", "S", [_arrival(5)]),
+    ]
+    payload = server.build_state(groups, NOW)
+
+    labeled, fallback = payload["stations"][0]["arrivals"]
+    assert (labeled["terminal"], labeled["borough"]) == ("96 St-2 Av", "Man")
+    assert labeled["direction_label"] == "Northbound"
+    assert (fallback["terminal"], fallback["borough"]) == (None, None)
 
 
 # --- endpoints ---------------------------------------------------------------

@@ -98,6 +98,8 @@ curl http://127.0.0.1:8000/api/state
           "line": "Q",
           "direction": "N",
           "direction_label": "Northbound",
+          "terminal": "96 St-2 Av",
+          "borough": "Man",
           "color": "#FCCC0A",
           "walk_minutes": 6,
           "arrivals": [
@@ -113,6 +115,11 @@ curl http://127.0.0.1:8000/api/state
   "alerts": []
 }
 ```
+
+Each group also carries a `terminal` + `borough` label (`null` when
+unconfigured; see [Configuration](#configuration)): the board shows the terminal
+station as the primary direction text with the borough as smaller secondary
+text, falling back to `direction_label` ("Northbound"/"Southbound") when unset.
 
 `refresh_interval_seconds` tells the board how often to re-poll. Each arrival's
 `catchability` (`CATCHABLE`/`HURRY`/`MISSED`, or `null` when the station has no
@@ -156,6 +163,25 @@ train arriving in more minutes than the walk is **catchable**, one within
 move fast), and any sooner is **missed**. Omit `walk_minutes` to leave a
 station's arrivals unclassified. When a station spans multiple `[[stations]]`
 blocks, repeat the same `walk_minutes` on each.
+
+Optional `[[direction_labels]]` blocks relabel a line/direction by its
+**terminal station** instead of "Northbound"/"Southbound" — riders think in
+terminals ("the uptown A to Inwood"), not compass words:
+
+```toml
+[[direction_labels]]
+line = "A"                       # subway line
+direction = "N"                  # "N" or "S" — the platform this applies to
+terminal = "Inwood-207 St"       # primary text shown in place of the compass word
+borough = "Man"                  # smaller secondary text (Man / Bklyn / Bx / Qns / SI)
+```
+
+The board shows `terminal` as the primary direction text and `borough` as
+smaller secondary text. For a branchy direction (e.g. the southbound A splits to
+Far Rockaway / Ozone Park / Lefferts) write whatever combined label reads best,
+e.g. `terminal = "Rockaway / Lefferts"`. Both `terminal` and `borough` are
+required in a block. A line/direction with no block falls back to
+"Northbound"/"Southbound", so you only label the ones you watch.
 
 To customize, copy it to a local override (gitignored so your settings stay
 private):
