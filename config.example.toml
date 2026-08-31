@@ -7,6 +7,11 @@
 # How often the frontend should refresh the board, in seconds.
 refresh_interval_seconds = 30
 
+# Best-case walk is this many minutes faster than a station's (worst-case)
+# walk_minutes. It sets the "HURRY" band: a train arriving within this many
+# minutes of your walk time is only makeable if you move fast. Default 1.
+walk_best_case_delta_minutes = 1
+
 # Stations to watch. Add one [[stations]] block per station + line-set you care
 # about. You identify stations by NAME and the LINES you want -- never by raw
 # GTFS stop ID. At startup the app resolves each block to concrete stop IDs from
@@ -21,27 +26,36 @@ refresh_interval_seconds = 30
 #   directions  Which platforms to show: "N" (northbound) and/or "S"
 #               (southbound). Concrete stop IDs are the parent ID plus this
 #               letter (e.g. "A41" + "N" -> "A41N").
+#   walk_minutes  Optional. Worst-case minutes to walk here from home. The board
+#               flags each train catchable / hurry / missed against it (see
+#               walk_best_case_delta_minutes above). Omit it to leave arrivals
+#               here unclassified.
 #
 # A single station can appear in multiple blocks when you want different lines in
-# different directions (see Hoyt-Schermerhorn below).
+# different directions (see Hoyt-Schermerhorn below); repeat the same
+# walk_minutes on each block for that station.
 
 # Hoyt-Schermerhorn Sts: A/C Manhattan-bound only...
 [[stations]]
 name = "Hoyt-Schermerhorn Sts"
 lines = ["A", "C"]
 directions = ["N"]
+walk_minutes = 6
 
-# ...and the G in both directions (the G never enters Manhattan).
+# ...and the G in both directions (the G never enters Manhattan). Same station,
+# so the same walk time.
 [[stations]]
 name = "Hoyt-Schermerhorn Sts"
 lines = ["G"]
 directions = ["N", "S"]
+walk_minutes = 6
 
 # Hoyt St (2/3) -- a different station from Hoyt-Schermerhorn.
 [[stations]]
 name = "Hoyt St"
 lines = ["2", "3"]
 directions = ["N"]
+walk_minutes = 4
 
 # DeKalb Av (BMT): Q/R both ways, plus B Manhattan-bound. The lines here also
 # disambiguate this DeKalb Av from the unrelated one on the L line.
@@ -49,11 +63,13 @@ directions = ["N"]
 name = "DeKalb Av"
 lines = ["Q", "R"]
 directions = ["N", "S"]
+walk_minutes = 5
 
 [[stations]]
 name = "DeKalb Av"
 lines = ["B"]
 directions = ["N"]
+walk_minutes = 5
 
 # Jay St-MetroTech: only the F Manhattan-bound. The A/C/R that also stop here are
 # filtered out by omission.
@@ -61,3 +77,4 @@ directions = ["N"]
 name = "Jay St-MetroTech"
 lines = ["F"]
 directions = ["N"]
+walk_minutes = 3

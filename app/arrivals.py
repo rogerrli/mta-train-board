@@ -24,13 +24,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from app.feeds import EASTERN, StopUpdate, fetch_stop_updates
 from app.stops import ResolvedStation, resolve_stations
 
 # How many upcoming trains to keep per line/direction by default.
 DEFAULT_LIMIT = 4
+
+# Can I make this train, given the walk from home? (#8)
+#   CATCHABLE  countdown > walk time -- makeable even at worst-case pace.
+#   HURRY      walk_time - delta <= countdown <= walk_time -- only if you move.
+#   MISSED     countdown < walk_time - delta -- not feasible; don't bother.
+# ``None`` (not in this Literal) means the station has no configured walk time,
+# so catchability is unknown and nothing is flagged.
+Catchability = Literal["CATCHABLE", "HURRY", "MISSED"]
+
+# Best-case walk is this many minutes faster than the configured worst-case walk;
+# the HURRY band is that grace window. Overridable via config (#8).
+DEFAULT_WALK_BEST_CASE_DELTA = 1
 
 # Human labels for the feed's N/S direction suffix.
 _DIRECTION_LABELS = {"N": "Northbound", "S": "Southbound"}
@@ -80,13 +92,15 @@ class Arrival:
     means arriving now). ``arrival`` is the tz-aware America/New_York time it was
     computed from -- the feed's arrival time, or its departure time at a trip's
     origin terminal where the feed omits arrival. ``headsign`` is the
-    destination/terminal label.
+    destination/terminal label. ``catchability`` classifies the train against the
+    station's walk time (#8), or is ``None`` when no walk time is configured.
     """
 
     minutes: int
     arrival: datetime
     trip_id: str
     headsign: str | None
+    catchability: Catchability | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +109,8 @@ class ArrivalGroup:
 
     ``direction`` is the raw "N"/"S" feed suffix; ``direction_label`` its human
     form ("Northbound"/"Southbound"). ``color`` is the line's hex color.
+    ``walk_minutes`` is the station's configured walk time (``None`` if unset),
+    echoed here so the UI has the threshold behind each arrival's catchability.
     """
 
     station: str
@@ -103,11 +119,30 @@ class ArrivalGroup:
     direction_label: str
     color: str
     arrivals: list[Arrival]
+    walk_minutes: float | None = None
 
 
 def _minutes_until(arrival: datetime, now: datetime) -> int:
     """Floored whole minutes from ``now`` to ``arrival`` (a 2m45s gap -> 2)."""
     return int((arrival - now).total_seconds() // 60)
+
+
+def _classify(
+    minutes: int, walk_minutes: float | None, delta: float
+) -> Catchability | None:
+    """Classify a train ``minutes`` out against a ``walk_minutes`` walk time.
+
+    Returns ``None`` when no walk time is configured (unknown); otherwise
+    CATCHABLE / HURRY / MISSED per the bands documented on :data:`Catchability`,
+    with ``delta`` as the best-case grace window.
+    """
+    if walk_minutes is None:
+        return None
+    if minutes > walk_minutes:
+        return "CATCHABLE"
+    if minutes >= walk_minutes - delta:
+        return "HURRY"
+    return "MISSED"
 
 
 def compute_arrivals(
@@ -116,6 +151,7 @@ def compute_arrivals(
     *,
     now: datetime | None = None,
     limit: int = DEFAULT_LIMIT,
+    walk_best_case_delta: float = DEFAULT_WALK_BEST_CASE_DELTA,
 ) -> list[ArrivalGroup]:
     """Build the arrivals model from resolved stations + feed stop updates.
 
@@ -125,6 +161,13 @@ def compute_arrivals(
     Groups are emitted in config order and always present, even when empty (no
     trains coming), so the UI can render a stable board. ``now`` defaults to the
     current America/New_York time.
+
+    Each arrival is classified against its station's walk time (#8) using
+    ``walk_best_case_delta`` as the HURRY grace window; see :func:`_classify`.
+    ``walk_best_case_delta`` is trusted here (a plain number); :func:`fetch_arrivals`
+    validates it at the config boundary. TODO(#6): the polling loop must reuse
+    :func:`fetch_arrivals` or run the same non-negative check before calling this,
+    so a bad config value can't reach here unvalidated.
     """
     if now is None:
         now = datetime.now(EASTERN)
@@ -155,6 +198,9 @@ def compute_arrivals(
                         arrival=when,
                         trip_id=u.trip_id,
                         headsign=u.headsign,
+                        catchability=_classify(
+                            minutes, station.walk_minutes, walk_best_case_delta
+                        ),
                     )
                 )
             arrivals.sort(key=lambda a: (a.arrival, a.trip_id))
@@ -166,6 +212,7 @@ def compute_arrivals(
                     direction_label=_DIRECTION_LABELS.get(direction, direction),
                     color=_ROUTE_COLORS.get(line, _DEFAULT_COLOR),
                     arrivals=arrivals[:limit],
+                    walk_minutes=station.walk_minutes,
                 )
             )
     return groups
@@ -184,10 +231,18 @@ def fetch_arrivals(
     are fetched (deduped by :mod:`app.feeds`). The polling/caching loop (#6) will
     instead reuse a cached fetch rather than calling this each request.
     """
+    delta = config.get("walk_best_case_delta_minutes", DEFAULT_WALK_BEST_CASE_DELTA)
+    if isinstance(delta, bool) or not isinstance(delta, (int, float)) or delta < 0:
+        raise ValueError(
+            f"walk_best_case_delta_minutes must be a non-negative number, "
+            f"got {delta!r}."
+        )
     stations = resolve_stations(config)
     routes = {line for s in stations for line in s.lines}
     updates = fetch_stop_updates(routes)
-    return compute_arrivals(stations, updates, now=now, limit=limit)
+    return compute_arrivals(
+        stations, updates, now=now, limit=limit, walk_best_case_delta=delta
+    )
 
 
 def _main() -> int:
@@ -211,9 +266,15 @@ def _main() -> int:
         print(f"error: {exc}")
         return 1
 
+    # Compact catchability marker per train: + catchable, ! hurry, x missed.
+    marks = {"CATCHABLE": "+", "HURRY": "!", "MISSED": "x"}
     for g in groups:
-        mins = ", ".join(f"{a.minutes}m" for a in g.arrivals) or "(none)"
-        print(f"{g.station:<24} {g.line:>2} {g.direction_label:<10} {mins}")
+        trains = [
+            f"{a.minutes}m{marks.get(a.catchability or '', '')}" for a in g.arrivals
+        ]
+        mins = ", ".join(trains) or "(none)"
+        walk = f"walk {g.walk_minutes:g}m" if g.walk_minutes is not None else "walk ?"
+        print(f"{g.station:<24} {g.line:>2} {g.direction_label:<10} {walk:<8} {mins}")
     return 0
 
 

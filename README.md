@@ -119,17 +119,26 @@ stop IDs from vendored MTA static data (`app/data/stations.csv`).
 
 ```toml
 refresh_interval_seconds = 30
+walk_best_case_delta_minutes = 1 # best case is this many min faster than walk_minutes
 
 [[stations]]
 name = "Hoyt-Schermerhorn Sts"   # exact MTA station name
 lines = ["A", "C"]               # only these lines show; others are filtered out
 directions = ["N", "S"]          # "N" = northbound, "S" = southbound
+walk_minutes = 6                 # optional; worst-case walk here from home
 ```
 
 Lines a station serves but you omit are filtered out (their trains never show),
 and the lines you list also disambiguate stations that share a name (e.g.
 "DeKalb Av" exists on both the BMT and the L). An unknown name or a line the
 station doesn't serve produces a helpful error listing what was found.
+
+`walk_minutes` lets the board flag whether you can actually make each train: a
+train arriving in more minutes than the walk is **catchable**, one within
+`walk_best_case_delta_minutes` of the walk is **hurry** (makeable only if you
+move fast), and any sooner is **missed**. Omit `walk_minutes` to leave a
+station's arrivals unclassified. When a station spans multiple `[[stations]]`
+blocks, repeat the same `walk_minutes` on each.
 
 To customize, copy it to a local override (gitignored so your settings stay
 private):
