@@ -13,6 +13,20 @@
 // poll; between polls we use this default, which self-corrects on the next poll.
 export const DEFAULT_WALK_DELTA = 1;
 
+// How many trains the glance (board) shows per line/direction. The cached
+// payload carries more (app.poller.BOARD_LIMIT) so tapping a row can open a
+// deeper breakdown (issue #9) without a second fetch; the board itself stays
+// scannable at this cap.
+export const GLANCE_LIMIT = 4;
+
+// Human label for a train's catchability (issue #8 bands), for the detail view.
+// `null` (no walk time configured) has no label -- there's nothing to say.
+export function catchabilityLabel(catchability) {
+  return (
+    { CATCHABLE: "Catchable", HURRY: "Run", MISSED: "Missed" }[catchability] ?? null
+  );
+}
+
 // Floored whole minutes from `now` to an ISO arrival time. Matches the backend's
 // _minutes_until (int(seconds // 60)): a 2m45s gap reads "2". Negative means the
 // train's arrival time has already passed.
@@ -57,6 +71,18 @@ export function liveArrivals(group, now) {
     });
   }
   return out;
+}
+
+// Wall-clock time (e.g. "8:19 AM") pinned to New York, matching the rest of the
+// board -- the whole app is America/New_York-anchored, regardless of the device's
+// timezone. Accepts anything Date parses: epoch ms for the status clock, an ISO
+// arrival string for the detail rows.
+export function clockTime(value) {
+  return new Date(value).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  });
 }
 
 // "just now" / "12s ago" / "3m ago" for the freshness indicator.

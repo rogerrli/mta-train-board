@@ -1,5 +1,5 @@
 <script>
-  import { agoLabel } from "../lib/format.js";
+  import { agoLabel, clockTime } from "../lib/format.js";
 
   let { payload, offline, now } = $props();
 
@@ -18,15 +18,8 @@
     { live: "LIVE", stale: "DATA IS OLD", offline: "OFFLINE" }[state],
   );
 
-  // Pin the wall clock to New York regardless of the device's timezone -- the
-  // whole app is America/New_York-anchored (the countdowns already are).
-  const clock = $derived(
-    new Date(now).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "America/New_York",
-    }),
-  );
+  // Pinned to New York regardless of the device's timezone (see clockTime).
+  const clock = $derived(clockTime(now));
 </script>
 
 <header class="bar">

@@ -92,6 +92,24 @@ def test_from_config_falls_back_to_defaults(monkeypatch):
 # --- poll loop ---------------------------------------------------------------
 
 
+def test_poll_once_requests_the_deeper_board_limit(monkeypatch):
+    # The cached board must carry more trains per line than the glance shows, so
+    # tapping a train can open a detail breakdown without a second fetch (#9).
+    captured: dict[str, object] = {}
+
+    def fake_fetch(config, *, now=None, limit=None):
+        captured["limit"] = limit
+        return [_group()]
+
+    monkeypatch.setattr(poller_mod, "fetch_arrivals", fake_fetch)
+    monkeypatch.setattr(poller_mod, "load_config", lambda: {})
+
+    Poller(refresh_seconds=30).poll_once()
+
+    assert captured["limit"] == poller_mod.BOARD_LIMIT
+    assert poller_mod.BOARD_LIMIT > 4  # deeper than the glance renders
+
+
 def test_run_caches_snapshot_and_sleeps_normal_interval(monkeypatch):
     groups = [_group()]
     monkeypatch.setattr(poller_mod, "fetch_arrivals", lambda *a, **k: groups)
