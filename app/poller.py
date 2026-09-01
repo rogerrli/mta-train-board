@@ -9,7 +9,7 @@ endpoints (one fetch per interval, not one per client request).
 Design (owner's calls on this issue):
 
 * **Concurrency** -- one asyncio task started in the server's lifespan. Each
-  cycle runs the *synchronous* :func:`app.arrivals.fetch_arrivals` in a worker
+  cycle runs the *synchronous* :func:`app.trips.fetch_board` in a worker
   thread (:func:`asyncio.to_thread`) so the event loop never blocks on network.
 * **Staleness** -- the cache keeps the last successful :class:`Snapshot` and its
   poll time. The API exposes ``stale``/``age_seconds`` computed against
@@ -26,12 +26,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
-from app.arrivals import ArrivalGroup, fetch_arrivals
+from app.arrivals import ArrivalGroup
 from app.config import load_config
 from app.feeds import EASTERN
+from app.trips import TripRecommendation, fetch_board
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +52,15 @@ BOARD_LIMIT = 10
 
 @dataclass(frozen=True)
 class Snapshot:
-    """The last successfully computed board and the time it was polled."""
+    """The last successfully computed board and the time it was polled.
+
+    ``recommendations`` are the arrive-by trip picks (#27), computed from the same
+    poll; empty when no ``[[trips]]`` are configured.
+    """
 
     groups: list[ArrivalGroup]
     updated_at: datetime
+    recommendations: list[TripRecommendation] = field(default_factory=list)
 
 
 class Poller:
@@ -111,18 +117,18 @@ class Poller:
         """Fetch the feeds and compute one board. Synchronous; may raise.
 
         Runs in a worker thread from the loop. Propagates whatever
-        :func:`fetch_arrivals` raises (feed, config, or unforeseen errors); the
-        loop catches broadly and backs off so a failure never ends polling.
+        :func:`app.trips.fetch_board` raises (feed, config, or unforeseen errors);
+        the loop catches broadly and backs off so a failure never ends polling.
         """
         now = datetime.now(EASTERN)
-        # TODO(#6): fetch_arrivals -> parse_feed rebuilds the NYCTFeed GTFS-static
+        # TODO(#6): fetch_board -> parse_feed rebuilds the NYCTFeed GTFS-static
         # tables from disk every poll (see the note in app/feeds.py:parse_feed).
         # A perf win for the Pi is to build one NYCTFeed and reuse it via
         # load_gtfs_bytes() across polls; deferred to keep this issue in its lane.
-        return Snapshot(
-            groups=fetch_arrivals(load_config(), now=now, limit=BOARD_LIMIT),
-            updated_at=now,
+        groups, recommendations = fetch_board(
+            load_config(), now=now, board_limit=BOARD_LIMIT
         )
+        return Snapshot(groups=groups, updated_at=now, recommendations=recommendations)
 
     async def _run(self) -> None:
         """Poll loop: refresh on success, back off exponentially on failure."""

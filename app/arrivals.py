@@ -27,7 +27,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from app.feeds import EASTERN, StopUpdate, fetch_stop_updates
-from app.stops import VALID_DIRECTIONS, ResolvedStation, resolve_stations
+from app.stops import VALID_DIRECTIONS, ResolvedStation, StopIndex, resolve_stations
 
 # How many upcoming trains to keep per line/direction by default.
 DEFAULT_LIMIT = 4
@@ -83,6 +83,11 @@ _ROUTE_COLORS = {
 
 # Fallback color for any route not in the map above.
 _DEFAULT_COLOR = "#808183"
+
+
+def route_color(line: str) -> str:
+    """Official MTA hex color for a GTFS ``line``, or a grey fallback."""
+    return _ROUTE_COLORS.get(line, _DEFAULT_COLOR)
 
 
 @dataclass(frozen=True)
@@ -142,8 +147,13 @@ class ArrivalGroup:
     borough: str | None = None
 
 
-def _minutes_until(arrival: datetime, now: datetime) -> int:
-    """Floored whole minutes from ``now`` to ``arrival`` (a 2m45s gap -> 2)."""
+def minutes_until(arrival: datetime, now: datetime) -> int:
+    """Floored whole minutes from ``now`` to ``arrival`` (a 2m45s gap -> 2).
+
+    The board's cross-language countdown contract: the frontend mirrors this exact
+    rounding (``frontend/src/lib/format.js``), and trip "leave in N min" (#27)
+    reuses it, so the rule lives in one place.
+    """
     return int((arrival - now).total_seconds() // 60)
 
 
@@ -254,7 +264,7 @@ def compute_arrivals(
                 when = u.arrival or u.departure
                 if when is None:
                     continue  # no timestamp at all -> can't count down
-                minutes = _minutes_until(when, now)
+                minutes = minutes_until(when, now)
                 if minutes < 0:
                     continue  # already departed / in the past
                 arrivals.append(
@@ -279,7 +289,7 @@ def compute_arrivals(
                     line=line,
                     direction=direction,
                     direction_label=_DIRECTION_LABELS.get(direction, direction),
-                    color=_ROUTE_COLORS.get(line, _DEFAULT_COLOR),
+                    color=route_color(line),
                     arrivals=arrivals[:limit],
                     walk_minutes=station.walk_minutes,
                     terminal=terminal,
@@ -287,6 +297,49 @@ def compute_arrivals(
                 )
             )
     return groups
+
+
+def validated_walk_delta(config: dict[str, Any]) -> float:
+    """Return ``walk_best_case_delta_minutes`` from config, validated non-negative.
+
+    Raises :class:`ValueError` on a negative or non-numeric value so a bad config
+    is caught at the boundary rather than silently mis-classifying trains.
+    """
+    delta = config.get("walk_best_case_delta_minutes", DEFAULT_WALK_BEST_CASE_DELTA)
+    if isinstance(delta, bool) or not isinstance(delta, (int, float)) or delta < 0:
+        raise ValueError(
+            f"walk_best_case_delta_minutes must be a non-negative number, "
+            f"got {delta!r}."
+        )
+    return float(delta)
+
+
+def resolve_and_fetch(
+    config: dict[str, Any], *, index: StopIndex | None = None
+) -> tuple[
+    list[ResolvedStation],
+    list[StopUpdate],
+    float,
+    dict[tuple[str, str], DirectionLabel],
+]:
+    """Resolve stations, validate config, and fetch the feeds they need.
+
+    The shared front half of building a board -- returns
+    ``(stations, updates, walk_delta, direction_labels)``. :func:`fetch_arrivals`
+    and :func:`app.trips.fetch_board` both build on it, so the resolve + fetch
+    sequence lives in one place instead of drifting between two orchestrators.
+    The walk delta and the ``[[direction_labels]]`` block are validated/parsed
+    first so malformed config fails fast, before ``resolve_stations`` can touch
+    the network on a stale-data refresh. Only the feed group(s) covering the
+    configured lines are fetched (deduped by :mod:`app.feeds`). Pass a prebuilt
+    ``index`` to share one station lookup.
+    """
+    delta = validated_walk_delta(config)
+    direction_labels = parse_direction_labels(config)
+    stations = resolve_stations(config, index=index)
+    routes = {line for s in stations for line in s.lines}
+    updates = fetch_stop_updates(routes)
+    return stations, updates, delta, direction_labels
 
 
 def fetch_arrivals(
@@ -298,23 +351,10 @@ def fetch_arrivals(
     """Resolve ``config``, fetch the needed live feeds, and compute arrivals.
 
     A convenience tying resolution + fetch + :func:`compute_arrivals` together for
-    a CLI or a first-cut API. Only the feed group(s) covering the configured lines
-    are fetched (deduped by :mod:`app.feeds`). The polling/caching loop (#6) will
-    instead reuse a cached fetch rather than calling this each request.
+    a CLI or a first-cut API. The polling/caching loop (#6) computes the full board
+    (arrivals + trip recommendations) via :func:`app.trips.fetch_board` instead.
     """
-    delta = config.get("walk_best_case_delta_minutes", DEFAULT_WALK_BEST_CASE_DELTA)
-    if isinstance(delta, bool) or not isinstance(delta, (int, float)) or delta < 0:
-        raise ValueError(
-            f"walk_best_case_delta_minutes must be a non-negative number, "
-            f"got {delta!r}."
-        )
-    # Parse the label config before resolving stations so a malformed
-    # direction_labels block fails fast, before resolve_stations can touch the
-    # network on a stale-data refresh (mirrors the delta check above).
-    direction_labels = parse_direction_labels(config)
-    stations = resolve_stations(config)
-    routes = {line for s in stations for line in s.lines}
-    updates = fetch_stop_updates(routes)
+    stations, updates, delta, direction_labels = resolve_and_fetch(config)
     return compute_arrivals(
         stations,
         updates,

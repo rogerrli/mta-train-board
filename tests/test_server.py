@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from app import server
 from app.arrivals import Arrival, ArrivalGroup
 from app.poller import Snapshot
+from app.trips import TrainOption, TripRecommendation
 
 EASTERN = ZoneInfo("America/New_York")
 NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=EASTERN)
@@ -114,8 +115,44 @@ def test_build_state_empty_when_no_groups():
         "age_seconds": 0,
         "refresh_interval_seconds": 30.0,
         "stations": [],
+        "trips": [],
         "alerts": [],
     }
+
+
+def test_build_state_serializes_trip_recommendation():
+    target = NOW.replace(hour=9, minute=0)
+    departure = NOW.replace(hour=8, minute=41)
+    rec = TripRecommendation(
+        name="morning-uptown",
+        boarding="Fulton St",
+        line="A",
+        direction="N",
+        destination="59 St-Columbus Circle",
+        target=target,
+        status="on_time",
+        recommended=TrainOption(
+            departure=departure,
+            minutes=4,
+            leave_by=departure - timedelta(minutes=6),
+            leave_in_minutes=2,
+            arrival=NOW.replace(hour=8, minute=59),
+            on_time=True,
+            lateness_minutes=0,
+        ),
+        fallback=None,
+    )
+    payload = server.build_state([], NOW, recommendations=[rec])
+    (trip,) = payload["trips"]
+    assert trip["name"] == "morning-uptown"
+    assert trip["status"] == "on_time"
+    assert trip["line"] == "A"
+    assert trip["color"] == "#0039A6"  # A = 8 Av blue
+    assert trip["target"] == target.isoformat()
+    assert trip["recommended"]["leave_in_minutes"] == 2
+    assert trip["recommended"]["on_time"] is True
+    assert trip["recommended"]["departure"] == departure.isoformat()
+    assert trip["fallback"] is None
 
 
 def test_build_state_passes_through_staleness():

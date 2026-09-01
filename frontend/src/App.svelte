@@ -3,6 +3,7 @@
   import StatusBar from "./components/StatusBar.svelte";
   import Station from "./components/Station.svelte";
   import TrainDetail from "./components/TrainDetail.svelte";
+  import Recommendation from "./components/Recommendation.svelte";
 
   const board = createBoard();
 
@@ -31,6 +32,13 @@
     const s = stations.find((st) => st.name === selected.station);
     return s?.arrivals[selected.index] ?? null;
   });
+
+  // Arrive-by recommendations (issue #27). A trip with no target today (e.g. a
+  // weekend) reports status "no_target" -- drop those so the strip only shows
+  // trips that are actually in play right now.
+  const trips = $derived(
+    ($board.payload?.trips ?? []).filter((t) => t.status !== "no_target"),
+  );
 </script>
 
 <div class="board">
@@ -47,6 +55,13 @@
     </div>
   {:else}
     <StatusBar payload={$board.payload} offline={$board.offline} {now} />
+    {#if trips.length > 0}
+      <div class="recommendations">
+        {#each trips as trip (trip.name)}
+          <Recommendation {trip} {now} />
+        {/each}
+      </div>
+    {/if}
     {#if stations.length === 0}
       <div class="center">
         <p>No stations configured.</p>
@@ -94,6 +109,13 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--gap);
+  }
+
+  .recommendations {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+    flex: none;
   }
 
   .center {

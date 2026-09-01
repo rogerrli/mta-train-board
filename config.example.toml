@@ -228,3 +228,46 @@ line = "C"
 direction = "N"
 terminal = "168 St"
 borough = "Man"
+
+# Arrive-by trips (issue #27) -----------------------------------------------
+#
+# A trip turns the board into a decision tool: "I need to be at X by 9:00 --
+# which train do I catch?" Given a destination and a target arrival time, the app
+# recommends the LATEST train that still gets you there on time (so you don't
+# leave earlier than you must), plus a safer earlier fallback, and says clearly
+# when even the best train arrives late. Add one [[trips]] block per commute.
+#
+#   name         Stable id for this trip (referenced by focus mode, issue #39).
+#   boarding     Station you board at. Must match a [[stations]] block above by
+#                NAME -- that's where the live countdowns and walk_minutes come
+#                from. Configure that station with the trip's line + direction,
+#                and give it a walk_minutes (arrive-by needs it).
+#   line         The single line for the whole ride (no transfers -- one line per
+#                trip for now).
+#   direction    "N" or "S", matching the boarding station block.
+#   destination  Where you're headed, by NAME (never a raw stop ID). Must be a
+#                stop served by `line`. Rebuild travel times after adding a line
+#                the vendored data wasn't trimmed to: `uv run scripts/refresh-travel-times`.
+#   arrive_buffer_minutes  Optional. Aim to be there this many minutes EARLY
+#                (the effective target is target - buffer). Default 0.
+#   [trips.target]  Recurring target arrival time (Eastern, 24h "HH:MM"), keyed by
+#                weekday abbreviation (mon/tue/wed/thu/fri/sat/sun) plus an
+#                optional `default`. Resolution for today: an explicit weekday key
+#                wins; otherwise a *weekday* (Mon-Fri) falls back to `default`; a
+#                weekend with no explicit key has NO target (the board shows no
+#                recommendation). So the block below means Tue 8:45, other
+#                weekdays 9:00, and nothing on weekends.
+
+# Example: board the A uptown at Fulton St (configured above) to 59 St-Columbus
+# Circle -- aim to arrive by 8:45 on Tuesdays, 9:00 the rest of the week. These
+# are placeholder stations/times; swap in your own trip in config.local.toml.
+[[trips]]
+name = "morning-uptown"
+boarding = "Fulton St"
+line = "A"
+direction = "N"
+destination = "59 St-Columbus Circle"
+
+[trips.target]
+default = "09:00"
+tue = "08:45"

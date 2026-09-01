@@ -76,13 +76,23 @@ export function liveArrivals(group, now) {
 // Wall-clock time (e.g. "8:19 AM") pinned to New York, matching the rest of the
 // board -- the whole app is America/New_York-anchored, regardless of the device's
 // timezone. Accepts anything Date parses: epoch ms for the status clock, an ISO
-// arrival string for the detail rows.
+// arrival string for the detail rows or an arrive-by trip (issue #27). Nullish
+// input (e.g. a trip with no target/arrival) renders as empty.
 export function clockTime(value) {
+  if (value == null) return "";
   return new Date(value).toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
     timeZone: "America/New_York",
   });
+}
+
+// Whole minutes from `now` until an ISO "leave by" time, never negative. Reuses
+// the floored `minutesUntil` (so the rounding stays one rule) and clamps: "leave
+// in N min" ticks down between polls like the countdowns, reading 0 ("leave now")
+// once the moment passes (issue #27).
+export function leaveInMinutes(iso, now = Date.now()) {
+  return Math.max(0, minutesUntil(iso, now));
 }
 
 // "just now" / "12s ago" / "3m ago" for the freshness indicator.

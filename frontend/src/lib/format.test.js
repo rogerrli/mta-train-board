@@ -13,6 +13,7 @@ import {
   bulletTextColor,
   catchabilityLabel,
   clockTime,
+  leaveInMinutes,
   DEFAULT_WALK_DELTA,
   GLANCE_LIMIT,
 } from "./format.js";
@@ -110,4 +111,16 @@ test("GLANCE_LIMIT is smaller than the cached depth, so the detail shows more", 
   // The board renders GLANCE_LIMIT per row; the server caches BOARD_LIMIT (10)
   // so tapping a row reveals more without another fetch (issue #9).
   assert.ok(GLANCE_LIMIT >= 1 && GLANCE_LIMIT < 10);
+});
+
+test("leaveInMinutes counts down and never goes negative (issue #27)", () => {
+  assert.equal(leaveInMinutes(iso(4, 30), NOW), 4); // 4m30s -> 4
+  assert.equal(leaveInMinutes(iso(0, 20), NOW), 0);
+  assert.equal(leaveInMinutes(iso(-3), NOW), 0); // already past -> "leave now"
+});
+
+test("clockTime renders a NY wall-clock label and empty for missing input", () => {
+  // 13:05 UTC == 09:05 America/New_York (EDT) on this summer date.
+  assert.equal(clockTime(new Date(Date.UTC(2026, 7, 30, 13, 5)).toISOString()), "9:05 AM");
+  assert.equal(clockTime(null), "");
 });

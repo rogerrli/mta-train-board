@@ -1,6 +1,6 @@
 """Tests for app.poller -- the background feed poller + cache. Fully offline.
 
-The loop is driven synchronously with ``asyncio.run``; ``fetch_arrivals`` and
+The loop is driven synchronously with ``asyncio.run``; ``fetch_board`` and
 ``asyncio.sleep`` are monkeypatched so nothing hits the network and the loop is
 broken deterministically after a fixed number of cycles (via a sentinel raised
 from the patched sleep).
@@ -94,25 +94,26 @@ def test_from_config_falls_back_to_defaults(monkeypatch):
 
 def test_poll_once_requests_the_deeper_board_limit(monkeypatch):
     # The cached board must carry more trains per line than the glance shows, so
-    # tapping a train can open a detail breakdown without a second fetch (#9).
+    # tapping a train can open a detail breakdown without a second fetch (#9). The
+    # poll now goes through fetch_board (#27), which takes the depth as board_limit.
     captured: dict[str, object] = {}
 
-    def fake_fetch(config, *, now=None, limit=None):
-        captured["limit"] = limit
-        return [_group()]
+    def fake_fetch(config, *, now=None, board_limit=None):
+        captured["board_limit"] = board_limit
+        return [_group()], []
 
-    monkeypatch.setattr(poller_mod, "fetch_arrivals", fake_fetch)
+    monkeypatch.setattr(poller_mod, "fetch_board", fake_fetch)
     monkeypatch.setattr(poller_mod, "load_config", lambda: {})
 
     Poller(refresh_seconds=30).poll_once()
 
-    assert captured["limit"] == poller_mod.BOARD_LIMIT
+    assert captured["board_limit"] == poller_mod.BOARD_LIMIT
     assert poller_mod.BOARD_LIMIT > 4  # deeper than the glance renders
 
 
 def test_run_caches_snapshot_and_sleeps_normal_interval(monkeypatch):
     groups = [_group()]
-    monkeypatch.setattr(poller_mod, "fetch_arrivals", lambda *a, **k: groups)
+    monkeypatch.setattr(poller_mod, "fetch_board", lambda *a, **k: (groups, []))
     monkeypatch.setattr(poller_mod, "load_config", lambda: {})
     delays: list[float] = []
     monkeypatch.setattr(asyncio, "sleep", _sleep_recorder(delays, stop_after=1))
@@ -133,10 +134,10 @@ def test_run_keeps_last_snapshot_and_backs_off_on_error(monkeypatch):
     def flaky(*a, **k):
         calls["n"] += 1
         if calls["n"] == 1:
-            return [_group()]
+            return ([_group()], [])
         raise FeedError("feed down")
 
-    monkeypatch.setattr(poller_mod, "fetch_arrivals", flaky)
+    monkeypatch.setattr(poller_mod, "fetch_board", flaky)
     monkeypatch.setattr(poller_mod, "load_config", lambda: {})
     delays: list[float] = []
     monkeypatch.setattr(asyncio, "sleep", _sleep_recorder(delays, stop_after=4))
@@ -155,7 +156,7 @@ def test_run_keeps_last_snapshot_and_backs_off_on_error(monkeypatch):
 
 def test_run_recovers_interval_after_a_failure(monkeypatch):
     # fail, fail, succeed -> backoff grows then resets to the normal interval.
-    seq = [FeedError("x"), FeedError("x"), [_group()]]
+    seq = [FeedError("x"), FeedError("x"), ([_group()], [])]
 
     def scripted(*a, **k):
         item = seq.pop(0)
@@ -163,7 +164,7 @@ def test_run_recovers_interval_after_a_failure(monkeypatch):
             raise item
         return item
 
-    monkeypatch.setattr(poller_mod, "fetch_arrivals", scripted)
+    monkeypatch.setattr(poller_mod, "fetch_board", scripted)
     monkeypatch.setattr(poller_mod, "load_config", lambda: {})
     delays: list[float] = []
     monkeypatch.setattr(asyncio, "sleep", _sleep_recorder(delays, stop_after=3))
@@ -183,10 +184,10 @@ def test_run_survives_unexpected_exception(monkeypatch):
     def flaky(*a, **k):
         calls["n"] += 1
         if calls["n"] == 1:
-            return [_group()]
+            return ([_group()], [])
         raise RuntimeError("unexpected deep failure")
 
-    monkeypatch.setattr(poller_mod, "fetch_arrivals", flaky)
+    monkeypatch.setattr(poller_mod, "fetch_board", flaky)
     monkeypatch.setattr(poller_mod, "load_config", lambda: {})
     delays: list[float] = []
     monkeypatch.setattr(asyncio, "sleep", _sleep_recorder(delays, stop_after=3))
@@ -218,7 +219,7 @@ def test_run_backs_off_on_station_and_value_errors(monkeypatch):
     def scripted(*a, **k):
         raise seq.pop(0)
 
-    monkeypatch.setattr(poller_mod, "fetch_arrivals", scripted)
+    monkeypatch.setattr(poller_mod, "fetch_board", scripted)
     monkeypatch.setattr(poller_mod, "load_config", lambda: {})
     delays: list[float] = []
     monkeypatch.setattr(asyncio, "sleep", _sleep_recorder(delays, stop_after=2))
@@ -235,7 +236,7 @@ def test_run_backs_off_on_station_and_value_errors(monkeypatch):
 
 
 def test_start_and_stop_are_clean(monkeypatch):
-    monkeypatch.setattr(poller_mod, "fetch_arrivals", lambda *a, **k: [_group()])
+    monkeypatch.setattr(poller_mod, "fetch_board", lambda *a, **k: ([_group()], []))
     monkeypatch.setattr(poller_mod, "load_config", lambda: {})
 
     async def scenario():
