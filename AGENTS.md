@@ -16,6 +16,15 @@ stations/directions, and serves JSON to a fullscreen web UI. See `README.md`.
 - **FastAPI + uvicorn** for the local HTTP/JSON API and serving the frontend.
 - **Config in TOML**: `config.example.toml` (committed) + `config.local.toml`
   (gitignored local override). Load with stdlib `tomllib`.
+- **No personal data in committed files.** The owner's real stations, walk
+  times, destinations, and daily schedule live **only** in gitignored
+  `config.local.toml` — never in `config.example.toml`, the README, tests,
+  code, docstrings, or issue/PR text. This repo is public: a committed example
+  that uses the owner's real config leaks their home and routine. Every
+  committed example must use **generic stations** — e.g. Times Sq-42 St, Grand
+  Central-42 St, 14 St-Union Sq, Fulton St — with placeholder walk/target
+  times, never a real home or commute. (The vendored `app/data/stations.csv`
+  is the full MTA station list, i.e. reference data, and is exempt.)
 - **ruff** for lint + format; **mypy** for type checking; **pytest** for tests.
 - Datetimes that represent train times are **timezone-aware `America/New_York`**.
 - Prefer the stdlib and existing deps. Add a dependency only when it clearly
