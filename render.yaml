@@ -1,0 +1,14 @@
+# Render blueprint for the public demo (issue #46).
+#
+# One-click deploy: on Render, New -> Blueprint -> pick this repo. Render reads
+# this file, builds the Dockerfile, and runs the service on the free plan. The
+# demo needs no environment variables or secrets -- it serves the default config
+# against the keyless live MTA feeds.
+services:
+  - type: web
+    name: mta-train-board
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true

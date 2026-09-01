@@ -271,6 +271,33 @@ uv run uvicorn app.server:app --reload --host 127.0.0.1  # terminal 1
 cd frontend && npm run dev                                # terminal 2
 ```
 
+## Public demo (Render)
+
+The board runs as a public demo on its **default config**: with no
+`config.local.toml` it falls back to `config.example.toml` (real Brooklyn
+stations) and pulls **live** MTA data. The subway GTFS-Realtime feeds are
+keyless, so the demo needs no secrets or environment variables.
+
+Deployment is packaged as a [`render.yaml`](render.yaml) blueprint plus a
+multi-stage [`Dockerfile`](Dockerfile) (a Node stage builds `frontend/dist`, a
+Python stage serves it with uvicorn). To deploy:
+
+1. On [Render](https://render.com), **New → Blueprint** and pick this repo.
+2. Render reads `render.yaml`, builds the Dockerfile, and starts the service on
+   the free plan — no env vars to set. `healthCheckPath` is `/api/health`.
+3. Open the assigned `*.onrender.com` URL to see the live board.
+
+The service binds `0.0.0.0:$PORT` (intentionally public, unlike the Pi's
+localhost bind). On the free plan it spins down when idle and cold-starts on the
+next request (~30–50s); a caller can warm it by pinging `/api/health` ahead of
+time. Build the image locally the same way Render does:
+
+```sh
+docker build -t mta-train-board .
+docker run --rm -p 8000:8000 mta-train-board
+curl http://127.0.0.1:8000/api/health   # {"status":"ok"}
+```
+
 ## Status
 
 Early setup. Work is tracked in
