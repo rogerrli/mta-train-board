@@ -27,7 +27,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from app.feeds import EASTERN, StopUpdate, fetch_stop_updates
-from app.stops import ResolvedStation, resolve_stations
+from app.stops import VALID_DIRECTIONS, ResolvedStation, resolve_stations
 
 # How many upcoming trains to keep per line/direction by default.
 DEFAULT_LIMIT = 4
@@ -44,7 +44,8 @@ Catchability = Literal["CATCHABLE", "HURRY", "MISSED"]
 # the HURRY band is that grace window. Overridable via config (#8).
 DEFAULT_WALK_BEST_CASE_DELTA = 1
 
-# Human labels for the feed's N/S direction suffix.
+# Human labels for the feed's N/S direction suffix -- the fallback shown for any
+# (line, direction) with no configured terminal label (#41).
 _DIRECTION_LABELS = {"N": "Northbound", "S": "Southbound"}
 
 # Official MTA line colors (hex), keyed by GTFS route_id. Grouped by trunk line;
@@ -104,13 +105,30 @@ class Arrival:
 
 
 @dataclass(frozen=True)
+class DirectionLabel:
+    """A configured terminal-station label for one (line, direction) (#41).
+
+    ``terminal`` is the destination the board shows in place of the compass word
+    (e.g. "Inwood-207 St"); ``borough`` is the smaller secondary text (e.g.
+    "Man"). Both are author-written free text, so a branchy direction can carry a
+    combined label ("Rockaway / Lefferts"). Both are required together.
+    """
+
+    terminal: str
+    borough: str
+
+
+@dataclass(frozen=True)
 class ArrivalGroup:
     """The next several trains for one station x line x direction.
 
     ``direction`` is the raw "N"/"S" feed suffix; ``direction_label`` its human
-    form ("Northbound"/"Southbound"). ``color`` is the line's hex color.
-    ``walk_minutes`` is the station's configured walk time (``None`` if unset),
-    echoed here so the UI has the threshold behind each arrival's catchability.
+    compass form ("Northbound"/"Southbound"). ``terminal`` / ``borough`` are the
+    configured terminal-station label for this (line, direction) (#41), or
+    ``None`` when unconfigured -- the board then falls back to ``direction_label``.
+    ``color`` is the line's hex color. ``walk_minutes`` is the station's
+    configured walk time (``None`` if unset), echoed here so the UI has the
+    threshold behind each arrival's catchability.
     """
 
     station: str
@@ -120,6 +138,8 @@ class ArrivalGroup:
     color: str
     arrivals: list[Arrival]
     walk_minutes: float | None = None
+    terminal: str | None = None
+    borough: str | None = None
 
 
 def _minutes_until(arrival: datetime, now: datetime) -> int:
@@ -145,6 +165,49 @@ def _classify(
     return "MISSED"
 
 
+def _clean_label_field(entry: dict[str, Any], key: str) -> str:
+    """Return a required non-empty string field from a direction_labels entry."""
+    value = entry.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"direction_labels entry {entry!r}: {key!r} must be a non-empty string."
+        )
+    return value.strip()
+
+
+def parse_direction_labels(
+    config: dict[str, Any],
+) -> dict[tuple[str, str], DirectionLabel]:
+    """Parse ``[[direction_labels]]`` config into a (line, direction) -> label map.
+
+    Each entry must give a ``line``, an ``N``/``S`` ``direction``, and non-empty
+    ``terminal`` and ``borough`` strings. Raises :class:`ValueError` on a
+    malformed or duplicate entry. A (line, direction) with no entry simply isn't
+    in the map, and :func:`compute_arrivals` falls back to the compass label for
+    it -- so unconfigured lines keep working.
+    """
+    labels: dict[tuple[str, str], DirectionLabel] = {}
+    for entry in config.get("direction_labels", []):
+        line = _clean_label_field(entry, "line")
+        direction = _clean_label_field(entry, "direction")
+        if direction not in VALID_DIRECTIONS:
+            raise ValueError(
+                f"direction_labels entry {entry!r}: direction must be one of "
+                f"{list(VALID_DIRECTIONS)}."
+            )
+        key = (line, direction)
+        if key in labels:
+            raise ValueError(
+                f"Duplicate direction_labels entry for line {line!r} "
+                f"direction {direction!r}."
+            )
+        labels[key] = DirectionLabel(
+            terminal=_clean_label_field(entry, "terminal"),
+            borough=_clean_label_field(entry, "borough"),
+        )
+    return labels
+
+
 def compute_arrivals(
     stations: list[ResolvedStation],
     updates: list[StopUpdate],
@@ -152,6 +215,7 @@ def compute_arrivals(
     now: datetime | None = None,
     limit: int = DEFAULT_LIMIT,
     walk_best_case_delta: float = DEFAULT_WALK_BEST_CASE_DELTA,
+    direction_labels: dict[tuple[str, str], DirectionLabel] | None = None,
 ) -> list[ArrivalGroup]:
     """Build the arrivals model from resolved stations + feed stop updates.
 
@@ -171,6 +235,7 @@ def compute_arrivals(
     """
     if now is None:
         now = datetime.now(EASTERN)
+    labels = direction_labels or {}
 
     # Index updates by (route_id, stop_id) for O(1) lookup per watched combo.
     by_route_stop: dict[tuple[str, str], list[StopUpdate]] = {}
@@ -204,6 +269,10 @@ def compute_arrivals(
                     )
                 )
             arrivals.sort(key=lambda a: (a.arrival, a.trip_id))
+            label = labels.get((line, direction))
+            terminal, borough = (
+                (label.terminal, label.borough) if label else (None, None)
+            )
             groups.append(
                 ArrivalGroup(
                     station=station.name,
@@ -213,6 +282,8 @@ def compute_arrivals(
                     color=_ROUTE_COLORS.get(line, _DEFAULT_COLOR),
                     arrivals=arrivals[:limit],
                     walk_minutes=station.walk_minutes,
+                    terminal=terminal,
+                    borough=borough,
                 )
             )
     return groups
@@ -237,11 +308,20 @@ def fetch_arrivals(
             f"walk_best_case_delta_minutes must be a non-negative number, "
             f"got {delta!r}."
         )
+    # Parse the label config before resolving stations so a malformed
+    # direction_labels block fails fast, before resolve_stations can touch the
+    # network on a stale-data refresh (mirrors the delta check above).
+    direction_labels = parse_direction_labels(config)
     stations = resolve_stations(config)
     routes = {line for s in stations for line in s.lines}
     updates = fetch_stop_updates(routes)
     return compute_arrivals(
-        stations, updates, now=now, limit=limit, walk_best_case_delta=delta
+        stations,
+        updates,
+        now=now,
+        limit=limit,
+        walk_best_case_delta=delta,
+        direction_labels=direction_labels,
     )
 
 

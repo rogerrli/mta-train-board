@@ -112,6 +112,12 @@ def build_state(
                 "line": g.line,
                 "direction": g.direction,
                 "direction_label": g.direction_label,
+                # Configured terminal-station label for this (line, direction)
+                # (#41): the board shows ``terminal`` as the primary direction
+                # text with ``borough`` as smaller secondary text, falling back
+                # to ``direction_label`` when these are null (unconfigured).
+                "terminal": g.terminal,
+                "borough": g.borough,
                 "color": g.color,
                 # Station walk time behind each arrival's catchability (issue #8),
                 # so the board can reclassify between polls; null when unconfigured.

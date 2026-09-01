@@ -9,17 +9,23 @@
 
   const arrivals = $derived(liveArrivals(group, now));
   const textColor = $derived(bulletTextColor(group.color));
+  // Terminal-station label (#41): show the configured destination + borough,
+  // falling back to the compass word ("Northbound") when unconfigured.
+  const primary = $derived(group.terminal ?? group.direction_label);
 </script>
 
 <div class="group">
   <span
     class="bullet"
     style="background:{group.color}; color:{textColor}"
-    title={group.direction_label}
+    title={primary}
   >
     {group.line}
   </span>
-  <span class="dir">{group.direction_label}</span>
+  <span class="dir" class:named={group.terminal}>
+    <span class="terminal">{primary}</span>
+    {#if group.borough}<span class="borough">{group.borough}</span>{/if}
+  </span>
   <div class="times">
     {#if arrivals.length === 0}
       <span class="none">No trains</span>
@@ -60,11 +66,41 @@
   .dir {
     flex: none;
     width: clamp(4.5rem, 12vw, 8rem);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.15em;
+    min-width: 0;
     color: var(--text-dim);
-    font-size: clamp(0.7rem, 1.8vh, 1.05rem);
     font-weight: 600;
+  }
+
+  .terminal {
+    font-size: clamp(0.7rem, 1.8vh, 1.05rem);
+    line-height: 1.1;
+    /* Keep a long terminal name from blowing out the fixed column: wrap to at
+       most two lines, then ellipsize. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+
+  /* The compass fallback ("Northbound") keeps its original all-caps treatment;
+     real terminal names are mixed-case and read better left as written. */
+  .dir:not(.named) .terminal {
     text-transform: uppercase;
     letter-spacing: 0.03em;
+  }
+
+  .borough {
+    font-size: clamp(0.55rem, 1.3vh, 0.8rem);
+    line-height: 1;
+    color: var(--text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .times {

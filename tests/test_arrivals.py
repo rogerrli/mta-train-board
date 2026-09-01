@@ -13,7 +13,13 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app import arrivals, feeds
-from app.arrivals import Arrival, ArrivalGroup, compute_arrivals
+from app.arrivals import (
+    Arrival,
+    ArrivalGroup,
+    DirectionLabel,
+    compute_arrivals,
+    parse_direction_labels,
+)
 from app.feeds import StopUpdate
 from app.stops import ResolvedStation, StopIndex
 
@@ -223,6 +229,87 @@ def test_attaches_direction_label_color_and_headsign():
     assert group.direction_label == "Northbound"
     assert group.color == "#FCCC0A"  # N/Q/R/W yellow
     assert group.arrivals[0].headsign == "Uptown Terminal"
+    # No direction_labels configured -> terminal/borough absent (compass fallback).
+    assert group.terminal is None
+    assert group.borough is None
+
+
+# --- terminal-station direction labels (#41) ---------------------------------
+
+
+def test_labels_group_with_configured_terminal_and_borough():
+    station = _station(lines=("Q",), directions=("N",))
+    labels = {("Q", "N"): DirectionLabel(terminal="96 St-2 Av", borough="Man")}
+    (group,) = compute_arrivals(
+        [station], [_update("Q", "R30N", 3)], now=NOW, direction_labels=labels
+    )
+    assert group.terminal == "96 St-2 Av"
+    assert group.borough == "Man"
+    # The compass label stays populated as the fallback the UI can still use.
+    assert group.direction_label == "Northbound"
+
+
+def test_unconfigured_direction_falls_back_to_compass():
+    # A label for N only; the S group must fall back rather than borrow it.
+    station = _station(lines=("Q",), directions=("N", "S"))
+    labels = {("Q", "N"): DirectionLabel(terminal="96 St-2 Av", borough="Man")}
+    north, south = compute_arrivals(
+        [station],
+        [_update("Q", "R30N", 3), _update("Q", "R30S", 3)],
+        now=NOW,
+        direction_labels=labels,
+    )
+    assert (north.terminal, north.borough) == ("96 St-2 Av", "Man")
+    assert (south.terminal, south.borough) == (None, None)
+    assert south.direction_label == "Southbound"
+
+
+def test_parse_direction_labels_builds_map():
+    config = {
+        "direction_labels": [
+            {
+                "line": "A",
+                "direction": "N",
+                "terminal": "Inwood-207 St",
+                "borough": "Man",
+            },
+            {
+                "line": "A",
+                "direction": "S",
+                "terminal": "Rockaway / Lefferts",
+                "borough": "Qns/Bklyn",
+            },
+        ]
+    }
+    labels = parse_direction_labels(config)
+    assert labels[("A", "N")] == DirectionLabel("Inwood-207 St", "Man")
+    assert labels[("A", "S")] == DirectionLabel("Rockaway / Lefferts", "Qns/Bklyn")
+
+
+def test_parse_direction_labels_empty_when_absent():
+    assert parse_direction_labels({}) == {}
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"direction": "N", "terminal": "T", "borough": "Man"},  # no line
+        {"line": "A", "terminal": "T", "borough": "Man"},  # no direction
+        {"line": "A", "direction": "N", "borough": "Man"},  # no terminal
+        {"line": "A", "direction": "N", "terminal": "T"},  # no borough
+        {"line": "A", "direction": "N", "terminal": "", "borough": "Man"},  # blank
+        {"line": "A", "direction": "E", "terminal": "T", "borough": "Man"},  # bad dir
+    ],
+)
+def test_parse_direction_labels_rejects_malformed_entry(entry):
+    with pytest.raises(ValueError):
+        parse_direction_labels({"direction_labels": [entry]})
+
+
+def test_parse_direction_labels_rejects_duplicate():
+    dup = {"line": "A", "direction": "N", "terminal": "T", "borough": "Man"}
+    with pytest.raises(ValueError, match="[Dd]uplicate"):
+        parse_direction_labels({"direction_labels": [dup, dup]})
 
 
 def test_empty_updates_still_emits_group():
