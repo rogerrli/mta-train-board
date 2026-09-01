@@ -33,9 +33,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.arrivals import Arrival, ArrivalGroup
+from app.arrivals import Arrival, ArrivalGroup, route_color
 from app.feeds import EASTERN
 from app.poller import Poller
+from app.trips import TrainOption, TripRecommendation
 
 # The board (issue #7) is a Vite + Svelte app whose built output lands in
 # frontend/dist. dist/ is gitignored and built at deploy time
@@ -86,10 +87,47 @@ def _serialize_arrival(a: Arrival) -> dict[str, Any]:
     }
 
 
+def _serialize_train_option(option: TrainOption | None) -> dict[str, Any] | None:
+    """One candidate train (leave/board/arrive times) as JSON, or null."""
+    if option is None:
+        return None
+    return {
+        "departure": option.departure.isoformat(),
+        "minutes": option.minutes,
+        "leave_by": option.leave_by.isoformat(),
+        "leave_in_minutes": option.leave_in_minutes,
+        "arrival": option.arrival.isoformat() if option.arrival else None,
+        "on_time": option.on_time,
+        "lateness_minutes": option.lateness_minutes,
+    }
+
+
+def _serialize_recommendation(rec: TripRecommendation) -> dict[str, Any]:
+    """One arrive-by trip recommendation (#27) as JSON.
+
+    Absolute times (``leave_by``, ``departure``, ``arrival``, ``target``) are sent
+    so the board can recompute "leave in N min" every second between polls, the
+    same way it reclassifies catchability (#8).
+    """
+    return {
+        "name": rec.name,
+        "boarding": rec.boarding,
+        "line": rec.line,
+        "color": route_color(rec.line),
+        "direction": rec.direction,
+        "destination": rec.destination,
+        "target": rec.target.isoformat() if rec.target else None,
+        "status": rec.status,
+        "recommended": _serialize_train_option(rec.recommended),
+        "fallback": _serialize_train_option(rec.fallback),
+    }
+
+
 def build_state(
     groups: list[ArrivalGroup],
     updated_at: datetime,
     *,
+    recommendations: list[TripRecommendation] | None = None,
     stale: bool = False,
     age_seconds: int = 0,
     refresh_interval_seconds: float = 30.0,
@@ -131,6 +169,8 @@ def build_state(
         "age_seconds": age_seconds,
         "refresh_interval_seconds": refresh_interval_seconds,
         "stations": list(stations.values()),
+        # Arrive-by trip recommendations (#27); empty when no [[trips]] configured.
+        "trips": [_serialize_recommendation(r) for r in (recommendations or [])],
         "alerts": [],  # TODO(#13): service alerts for the watched lines.
     }
 
@@ -161,6 +201,7 @@ def state() -> dict[str, Any]:
     return build_state(
         snapshot.groups,
         snapshot.updated_at,
+        recommendations=snapshot.recommendations,
         stale=poller.is_stale(snapshot, now=now),
         age_seconds=int(poller.age_seconds(snapshot, now=now)),
         refresh_interval_seconds=poller.refresh_seconds,

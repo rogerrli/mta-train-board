@@ -183,6 +183,41 @@ e.g. `terminal = "Rockaway / Lefferts"`. Both `terminal` and `borough` are
 required in a block. A line/direction with no block falls back to
 "Northbound"/"Southbound", so you only label the ones you watch.
 
+#### Arrive-by trips
+
+A `[[trips]]` block turns the board into a decision tool: given a destination and
+a target arrival time, it recommends the **latest** train that still gets you
+there on time (so you don't leave earlier than you must), a safer earlier
+fallback, and a clear "you can't make it" state when even the best train arrives
+late. The recommendation shows as a strip above the station board and appears in
+`/api/state` under `trips`.
+
+```toml
+[[trips]]
+name = "morning-uptown"          # stable id (referenced by focus mode, #39)
+boarding = "Fulton St"           # must match a [[stations]] block by name
+line = "A"                       # one line for the whole ride (no transfers)
+direction = "N"                  # matches the boarding station block
+destination = "59 St-Columbus Circle" # by name; must be a stop served by `line`
+arrive_buffer_minutes = 0        # optional; aim to be there this many min early
+
+[trips.target]                   # recurring target arrival (Eastern, 24h HH:MM)
+default = "09:00"                # any *weekday* (Mon–Fri) not listed below
+tue = "08:45"                    # Tuesdays specifically
+```
+
+The `boarding` station must also be configured as a `[[stations]]` block on the
+same line/direction, **with a `walk_minutes` set** — that's where the live
+countdowns and walk time come from. The `[trips.target]` table is keyed by
+weekday abbreviation (`mon`…`sun`) plus an optional `default`. For "today"
+(Eastern): an explicit weekday key wins; otherwise a **weekday** falls back to
+`default`; a **weekend** with no explicit key has *no target*, so the board
+simply shows no recommendation that day. The block above (generic placeholder
+stations/times) means 8:45 on Tuesdays, 9:00 the rest of the workweek, and
+nothing on weekends. Ride durations come from the vendored travel-time model —
+after adding a `line` the model wasn't built with, rebuild it with `uv run
+scripts/refresh-travel-times`.
+
 To customize, copy it to a local override (gitignored so your settings stay
 private):
 
