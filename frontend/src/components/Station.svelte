@@ -4,9 +4,20 @@
   // One station card: its name plus each watched line/direction group (the API
   // nests groups under `arrivals`, config order preserved).
   let { station, now } = $props();
+
+  // Weight for content-proportional sizing (issue #40): each group contributes
+  // its row plus its trains, so a station we watch more heavily claims more of
+  // the board. Off the raw payload counts (not the per-second `liveArrivals`),
+  // so the weight only shifts on a poll, not every tick — no countdown jitter.
+  const weight = $derived(
+    Math.max(
+      1,
+      station.arrivals.reduce((n, g) => n + 1 + g.arrivals.length, 0),
+    ),
+  );
 </script>
 
-<section class="station">
+<section class="station" style="flex-grow: {weight}">
   <h2 class="name">{station.name}</h2>
   <div class="groups">
     <!-- Index in the key: line+direction alone can repeat if a station is listed
@@ -20,6 +31,13 @@
 
 <style>
   .station {
+    /* flex-grow is set inline from the station's content weight (issue #40); a
+       shared basis + a floor width let dense stations widen without starving
+       sparse ones, and wrap instead of shrinking to slivers on a narrow board. */
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 20rem;
+    min-width: min(100%, 18rem);
     background: var(--panel);
     border: 1px solid var(--panel-edge);
     border-radius: clamp(0.4rem, 1vw, 0.9rem);

@@ -40,7 +40,7 @@
         <p class="hint">Add <code>[[stations]]</code> blocks to your config.</p>
       </div>
     {:else}
-      <div class="stations" style="--cols: {Math.min(stations.length, 2)}">
+      <div class="stations">
         {#each stations as station (station.name)}
           <Station {station} {now} />
         {/each}
@@ -58,11 +58,15 @@
     gap: var(--gap);
   }
 
+  /* Content-proportional cards: a flex row that wraps, where each station grows
+     by its own weight (set on .station in Station.svelte from its group/arrival
+     counts). Denser stations claim more width; the shared flex-basis + wrap keep
+     it responsive as the station count changes. */
   .stations {
     flex: 1;
     min-height: 0;
-    display: grid;
-    grid-template-columns: repeat(var(--cols), 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--gap);
   }
 

@@ -1,5 +1,5 @@
 <script>
-  import { liveArrivals, bulletTextColor } from "../lib/format.js";
+  import { liveArrivals, bulletTextColor, countdownLabel } from "../lib/format.js";
 
   // One line + direction: the route bullet, the direction, and the next few
   // countdowns. Minutes and catchability are recomputed every second off the
@@ -29,11 +29,9 @@
           class="min tnum {a.catchability?.toLowerCase() ?? 'calm'}"
           class:lead={i === 0}
         >
-          {a.minutes}
-          {#if a.catchability === "HURRY"}<span class="tag">run</span>{/if}
+          {countdownLabel(a.minutes)}
         </span>
       {/each}
-      <span class="unit">min</span>
     {/if}
   </div>
 </div>
@@ -82,7 +80,6 @@
     font-weight: 800;
     line-height: 1;
     color: var(--calm);
-    position: relative;
   }
 
   /* The soonest train is the one you act on: make it the biggest thing here. */
@@ -96,29 +93,12 @@
     animation: pulse 1.1s ease-in-out infinite;
   }
 
-  .tag {
-    position: absolute;
-    top: -0.35em;
-    right: -1.4em;
-    font-size: 0.28em;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--hurry);
-  }
-
   /* MISSED: not feasible at walking pace. De-emphasize (owner's #7 call), keep
      it visible so the pattern of service still reads. */
   .min.missed {
     color: var(--text-faint);
     text-decoration: line-through;
     text-decoration-thickness: 0.06em;
-    font-weight: 600;
-  }
-
-  .unit {
-    font-size: clamp(0.7rem, 1.8vh, 1.05rem);
-    color: var(--text-dim);
     font-weight: 600;
   }
 
