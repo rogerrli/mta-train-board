@@ -92,7 +92,7 @@ curl http://127.0.0.1:8000/api/state
   "refresh_interval_seconds": 30,
   "stations": [
     {
-      "name": "DeKalb Av",
+      "name": "14 St-Union Sq",
       "arrivals": [
         {
           "line": "Q",
@@ -139,15 +139,15 @@ stale_after_seconds = 90        # flag the board `stale` past this age
 walk_best_case_delta_minutes = 1 # best case is this many min faster than walk_minutes
 
 [[stations]]
-name = "Hoyt-Schermerhorn Sts"   # exact MTA station name
-lines = ["A", "C"]               # only these lines show; others are filtered out
+name = "Times Sq-42 St"          # exact MTA station name
+lines = ["1", "2", "3"]          # only these lines show; others are filtered out
 directions = ["N", "S"]          # "N" = northbound, "S" = southbound
-walk_minutes = 6                 # optional; worst-case walk here from home
+walk_minutes = 5                 # optional; worst-case walk here from home
 ```
 
 Lines a station serves but you omit are filtered out (their trains never show),
 and the lines you list also disambiguate stations that share a name (e.g.
-"DeKalb Av" exists on both the BMT and the L). An unknown name or a line the
+"Fulton St" names several separate platforms across different lines). An unknown name or a line the
 station doesn't serve produces a helpful error listing what was found.
 
 `walk_minutes` lets the board flag whether you can actually make each train: a

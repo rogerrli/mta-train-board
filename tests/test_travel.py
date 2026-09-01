@@ -179,9 +179,9 @@ def test_vendored_artifact_loads_and_answers() -> None:
     model = TravelTimeModel.load(VENDORED_TRAVEL_TIMES)
     assert model.routes  # non-empty
     assert model.feed_version
-    # DeKalb Av (R30) -> Union Sq (R20) on the Q, Manhattan-bound: a real ride.
+    # 14 St-Union Sq (R20) -> Times Sq-42 St (R16) on the Q, northbound: a real ride.
     at = datetime(2026, 9, 1, 8, 30, tzinfo=EASTERN)
-    ride = model.travel_time("R30", "R20", "Q", "N", at)
+    ride = model.travel_time("R20", "R16", "Q", "N", at)
     assert ride is not None and timedelta(minutes=5) <= ride <= timedelta(minutes=40)
     # A pair that shares no trip returns an explicit "no estimate".
-    assert model.travel_time("R20", "A41", "R", "N", at) is None
+    assert model.travel_time("R20", "127", "R", "N", at) is None

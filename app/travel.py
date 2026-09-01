@@ -327,7 +327,7 @@ def _main() -> int:
     """Print one scheduled ride duration. For a quick spot-check against the MTA.
 
     ``uv run python -m app.travel <from_parent> <to_parent> <line> <N|S> [HH:MM]``
-    e.g. ``uv run python -m app.travel R30 R20 Q N 08:30`` (DeKalb Av -> Union Sq).
+    e.g. ``uv run python -m app.travel R20 R16 Q N 08:30`` (Union Sq -> Times Sq).
     """
     import sys
 

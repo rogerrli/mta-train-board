@@ -25,7 +25,7 @@ walk_best_case_delta_minutes = 1
 # the vendored MTA static station data (see app/stops.py).
 #
 #   name        Human station name, exactly as the MTA lists it (e.g.
-#               "Grand Central-42 St", "Hoyt-Schermerhorn Sts"). An unknown name
+#               "Grand Central-42 St", "Times Sq-42 St"). An unknown name
 #               produces a helpful error suggesting close matches.
 #   lines       The subway lines you want to see here (e.g. ["A", "C"]). Lines a
 #               station serves but you omit are filtered out -- their trains
@@ -39,49 +39,39 @@ walk_best_case_delta_minutes = 1
 #               here unclassified.
 #
 # A single station can appear in multiple blocks when you want different lines in
-# different directions (see Hoyt-Schermerhorn below); repeat the same
+# different directions (see Times Sq-42 St below); repeat the same
 # walk_minutes on each block for that station.
 
-# Hoyt-Schermerhorn Sts: A/C Manhattan-bound only...
+# Example stations below use well-known Manhattan hubs so this file stays a
+# generic demo. Copy it to config.local.toml and swap in your own stations.
+
+# Times Sq-42 St: the 1/2/3 in both directions.
 [[stations]]
-name = "Hoyt-Schermerhorn Sts"
+name = "Times Sq-42 St"
+lines = ["1", "2", "3"]
+directions = ["N", "S"]
+walk_minutes = 5
+
+# Same station, the N/Q/R/W platform. List a station once per line-set you want;
+# reuse the same walk time across its blocks.
+[[stations]]
+name = "Times Sq-42 St"
+lines = ["N", "Q", "R", "W"]
+directions = ["N", "S"]
+walk_minutes = 5
+
+# Grand Central-42 St: the 4/5/6, both directions.
+[[stations]]
+name = "Grand Central-42 St"
+lines = ["4", "5", "6"]
+directions = ["N", "S"]
+walk_minutes = 8
+
+# Fulton St: only the A/C here. Several other lines (2/3, 4/5, J/Z) also carry the
+# name "Fulton St" on separate platforms; omitting them filters them out, and the
+# lines you list disambiguate which "Fulton St" you mean.
+[[stations]]
+name = "Fulton St"
 lines = ["A", "C"]
 directions = ["N"]
-walk_minutes = 6
-
-# ...and the G in both directions (the G never enters Manhattan). Same station,
-# so the same walk time.
-[[stations]]
-name = "Hoyt-Schermerhorn Sts"
-lines = ["G"]
-directions = ["N", "S"]
-walk_minutes = 6
-
-# Hoyt St (2/3) -- a different station from Hoyt-Schermerhorn.
-[[stations]]
-name = "Hoyt St"
-lines = ["2", "3"]
-directions = ["N"]
 walk_minutes = 4
-
-# DeKalb Av (BMT): Q/R both ways, plus B Manhattan-bound. The lines here also
-# disambiguate this DeKalb Av from the unrelated one on the L line.
-[[stations]]
-name = "DeKalb Av"
-lines = ["Q", "R"]
-directions = ["N", "S"]
-walk_minutes = 5
-
-[[stations]]
-name = "DeKalb Av"
-lines = ["B"]
-directions = ["N"]
-walk_minutes = 5
-
-# Jay St-MetroTech: only the F Manhattan-bound. The A/C/R that also stop here are
-# filtered out by omission.
-[[stations]]
-name = "Jay St-MetroTech"
-lines = ["F"]
-directions = ["N"]
-walk_minutes = 3

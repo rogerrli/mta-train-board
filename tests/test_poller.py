@@ -26,7 +26,7 @@ class _StopLoop(Exception):
     """Sentinel raised from the patched sleep to break the poll loop in tests."""
 
 
-def _group(station="DeKalb Av") -> ArrivalGroup:
+def _group(station="14 St-Union Sq") -> ArrivalGroup:
     return ArrivalGroup(
         station=station,
         line="Q",
@@ -132,7 +132,7 @@ def test_run_keeps_last_snapshot_and_backs_off_on_error(monkeypatch):
     assert delays == [30, 60, 120, 200]
     # The good snapshot from the first cycle is still served through the outage.
     assert p.snapshot is not None
-    assert p.snapshot.groups[0].station == "DeKalb Av"
+    assert p.snapshot.groups[0].station == "14 St-Union Sq"
 
 
 def test_run_recovers_interval_after_a_failure(monkeypatch):
