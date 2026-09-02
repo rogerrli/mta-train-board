@@ -3,10 +3,12 @@
 
   // One station card: its name plus each watched line/direction group (the API
   // nests groups under `arrivals`, config order preserved). `onselect(name, i)`
-  // bubbles a tapped group up to the board so it can open the detail overlay
-  // (issue #9); the index disambiguates a line/direction that repeats across
-  // config blocks (see the key note below).
-  let { station, now, onselect } = $props();
+  // bubbles a tapped group up to the board so it can open the single-train detail
+  // overlay (issue #9); the index disambiguates a line/direction that repeats
+  // across config blocks (see the key note below). `onstationselect(name)` fires
+  // when the station name is tapped, opening the consolidated station view
+  // (issue #10) -- a separate target from the group rows so both coexist.
+  let { station, now, onselect, onstationselect } = $props();
 
   // Weight for content-proportional sizing (issue #40): each group contributes
   // its row plus its trains, so a station we watch more heavily claims more of
@@ -21,7 +23,11 @@
 </script>
 
 <section class="station" style="flex-grow: {weight}">
-  <h2 class="name">{station.name}</h2>
+  <h2 class="name">
+    <button type="button" class="name-btn" onclick={() => onstationselect(station.name)}>
+      {station.name}
+    </button>
+  </h2>
   <div class="groups">
     <!-- Index in the key: line+direction alone can repeat if a station is listed
          in two config blocks with an overlapping direction, and a duplicate key
@@ -57,6 +63,37 @@
     font-weight: 800;
     line-height: 1.05;
     letter-spacing: -0.01em;
+  }
+
+  /* The name is a button (tap -> consolidated station view, issue #10) but must
+     read as the plain card heading: strip the native chrome and inherit type. */
+  .name-btn {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: clamp(0.1rem, 0.5vh, 0.3rem) clamp(0.15rem, 0.5vw, 0.4rem);
+    border: none;
+    border-radius: clamp(0.3rem, 0.8vw, 0.6rem);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.12s ease;
+  }
+  .name-btn:active {
+    background: var(--panel-edge);
+  }
+  .name-btn:focus-visible {
+    outline: 2px solid var(--text-dim);
+    outline-offset: 2px;
+  }
+  @media (hover: hover) {
+    .name-btn:hover {
+      background: var(--panel-edge);
+    }
   }
 
   .groups {

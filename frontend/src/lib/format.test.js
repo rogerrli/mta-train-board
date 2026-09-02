@@ -14,6 +14,7 @@ import {
   catchabilityLabel,
   clockTime,
   leaveInMinutes,
+  stationWalkMinutes,
   DEFAULT_WALK_DELTA,
   GLANCE_LIMIT,
 } from "./format.js";
@@ -123,4 +124,24 @@ test("clockTime renders a NY wall-clock label and empty for missing input", () =
   // 13:05 UTC == 09:05 America/New_York (EDT) on this summer date.
   assert.equal(clockTime(new Date(Date.UTC(2026, 7, 30, 13, 5)).toISOString()), "9:05 AM");
   assert.equal(clockTime(null), "");
+});
+
+test("stationWalkMinutes returns the shared value, else null (issue #10)", () => {
+  // The common case: every group at the station carries the same walk time.
+  assert.equal(
+    stationWalkMinutes({ arrivals: [{ walk_minutes: 5 }, { walk_minutes: 5 }] }),
+    5,
+  );
+  // No group has a walk time -> nothing to show.
+  assert.equal(
+    stationWalkMinutes({ arrivals: [{ walk_minutes: null }, {}] }),
+    null,
+  );
+  // Groups disagree (misconfig) -> omit rather than pick one arbitrarily.
+  assert.equal(
+    stationWalkMinutes({ arrivals: [{ walk_minutes: 5 }, { walk_minutes: 8 }] }),
+    null,
+  );
+  // A single group with a walk time still resolves.
+  assert.equal(stationWalkMinutes({ arrivals: [{ walk_minutes: 4 }] }), 4);
 });

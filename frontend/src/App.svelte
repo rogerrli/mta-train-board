@@ -3,6 +3,7 @@
   import StatusBar from "./components/StatusBar.svelte";
   import Station from "./components/Station.svelte";
   import TrainDetail from "./components/TrainDetail.svelte";
+  import StationDetail from "./components/StationDetail.svelte";
   import Recommendation from "./components/Recommendation.svelte";
   import FocusView from "./components/FocusView.svelte";
 
@@ -33,6 +34,18 @@
     const s = stations.find((st) => st.name === selected.station);
     return s?.arrivals[selected.index] ?? null;
   });
+
+  // Tapped-station consolidated view (issue #10). Same pattern as the train
+  // overlay: remember the station by name and re-derive the live station object
+  // each render, so its arrival lists tick and refresh on every poll and it
+  // closes on its own if a config change drops the station. The two overlays are
+  // separate tap targets (name vs. group row) and mutually exclusive -- opening
+  // one clears the other.
+  let selectedStation = $state(null); // station name | null
+
+  const selectedStationObj = $derived(
+    selectedStation ? (stations.find((st) => st.name === selectedStation) ?? null) : null,
+  );
 
   // Arrive-by recommendations (issue #27). A trip with no target today (e.g. a
   // weekend) reports status "no_target" -- drop those so the strip only shows
@@ -90,7 +103,14 @@
             <Station
               {station}
               {now}
-              onselect={(name, index) => (selected = { station: name, index })}
+              onselect={(name, index) => {
+                selectedStation = null;
+                selected = { station: name, index };
+              }}
+              onstationselect={(name) => {
+                selected = null;
+                selectedStation = name;
+              }}
             />
           {/each}
         </div>
@@ -105,6 +125,14 @@
     station={selected.station}
     {now}
     onclose={() => (selected = null)}
+  />
+{/if}
+
+{#if selectedStationObj && !focusTrip}
+  <StationDetail
+    station={selectedStationObj}
+    {now}
+    onclose={() => (selectedStation = null)}
   />
 {/if}
 
