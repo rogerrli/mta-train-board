@@ -218,6 +218,30 @@ nothing on weekends. Ride durations come from the vendored travel-time model —
 after adding a `line` the model wasn't built with, rebuild it with `uv run
 scripts/refresh-travel-times`.
 
+#### Scheduled focus mode
+
+For a known daily commute there's really only **one** train that matters in a
+given window. A `[[focus]]` block dedicates the **whole screen** to a single
+trip's arrive-by recommendation during a configured time window — hiding every
+other station and train — then returns to the normal glance board when the window
+ends. It's a config-driven list, so add more known-schedule cases without code;
+with none configured the board always shows the glance view.
+
+```toml
+[[focus]]
+trip = "morning-uptown"          # references a [[trips]] name (owns the target)
+days = ["mon", "tue", "wed", "thu", "fri"]  # weekday abbreviations
+start = "08:00"                  # Eastern 24h HH:MM, inclusive
+end = "09:00"                    # exclusive; must be after start
+```
+
+A focus rule only points at a `[[trips]]` block by `name` — the **target arrival
+time is owned by that trip**, never redefined here. The board re-checks the active
+rule on every refresh, so focus flips in/out right around the window boundary; the
+focus header reuses the trip's `[[direction_labels]]` terminal + borough (e.g. "A
+→ Inwood-207 St", "Man"). If two rules ever overlap, the **first listed wins**. A
+window crossing midnight isn't supported — split it into two rules.
+
 To customize, copy it to a local override (gitignored so your settings stay
 private):
 

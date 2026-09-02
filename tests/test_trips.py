@@ -59,7 +59,12 @@ def _trip(
 
 
 def _group(
-    trip: ResolvedTrip, depart_minutes: list[int], now: datetime, walk_minutes=6
+    trip: ResolvedTrip,
+    depart_minutes: list[int],
+    now: datetime,
+    walk_minutes=6,
+    terminal=None,
+    borough=None,
 ) -> ArrivalGroup:
     """An ArrivalGroup whose trains depart the given whole-minutes from ``now``."""
     arrivals = [
@@ -79,6 +84,8 @@ def _group(
         color="#0039A6",
         arrivals=arrivals,
         walk_minutes=walk_minutes,
+        terminal=terminal,
+        borough=borough,
     )
 
 
@@ -202,6 +209,17 @@ def test_missing_group_is_no_service():
     trip = _trip()
     rec = recommend_trip(trip, None, WEDNESDAY_7_40, travel_time=_fixed_ride(40))
     assert rec.status == "no_service"
+    assert (rec.terminal, rec.borough) == (None, None)  # no group -> no label
+
+
+def test_recommendation_carries_boarding_group_terminal_label():
+    # The #41 terminal label rides on the recommendation (from the boarding group),
+    # so focus mode (#39) can name the direction without re-joining the board.
+    trip = _trip()
+    now = WEDNESDAY_7_40
+    group = _group(trip, [10], now, terminal="Inwood-207 St", borough="Man")
+    rec = recommend_trip(trip, group, now, travel_time=_fixed_ride(40))
+    assert (rec.terminal, rec.borough) == ("Inwood-207 St", "Man")
 
 
 def test_leave_by_and_leave_in_are_correct():

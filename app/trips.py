@@ -160,7 +160,10 @@ class TripRecommendation:
     ``recommended`` is the train to catch -- the latest on-time one, or the
     least-late one when nothing makes it; ``fallback`` is a safer earlier on-time
     train when one exists. Both are ``None`` for the no-target / no-service /
-    no-estimate states, which :attr:`status` names.
+    no-estimate states, which :attr:`status` names. ``terminal`` / ``borough`` are
+    the boarding group's #41 terminal-station label for this (line, direction) --
+    the same label the board shows -- so a consumer (e.g. focus mode #39) can name
+    the direction without re-joining the board's groups; ``None`` when unlabeled.
     """
 
     name: str
@@ -172,6 +175,8 @@ class TripRecommendation:
     status: RecommendationStatus
     recommended: TrainOption | None = None
     fallback: TrainOption | None = None
+    terminal: str | None = None
+    borough: str | None = None
 
 
 def _resolve_stop(
@@ -305,6 +310,10 @@ def recommend_trip(
         destination=trip.destination,
         target=target,
         status="no_target",
+        # Carry the boarding group's #41 label so consumers (focus mode #39) name
+        # the direction without re-deriving it; None when the group is absent.
+        terminal=group.terminal if group else None,
+        borough=group.borough if group else None,
     )
     if target is None:
         return base

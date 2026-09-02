@@ -17,6 +17,7 @@ from app.arrivals import ArrivalGroup
 from app.feeds import FeedError
 from app.poller import Poller, Snapshot
 from app.stops import StationResolutionError
+from app.trips import TripRecommendation
 
 EASTERN = ZoneInfo("America/New_York")
 NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=EASTERN)
@@ -109,6 +110,55 @@ def test_poll_once_requests_the_deeper_board_limit(monkeypatch):
 
     assert captured["board_limit"] == poller_mod.BOARD_LIMIT
     assert poller_mod.BOARD_LIMIT > 4  # deeper than the glance renders
+
+
+def test_poll_once_resolves_focus_rules_onto_the_snapshot(monkeypatch):
+    # Scheduled focus (#39): each poll resolves [[focus]] rules from the same
+    # config, validated against the recommendations' trip names, and stores them on
+    # the snapshot for the API to evaluate at request time.
+    rec = TripRecommendation(
+        name="morning-uptown",
+        boarding="Fulton St",
+        line="A",
+        direction="N",
+        destination="59 St-Columbus Circle",
+        target=None,
+        status="no_target",
+    )
+    config = {
+        "focus": [
+            {
+                "trip": "morning-uptown",
+                "days": ["mon"],
+                "start": "08:00",
+                "end": "09:00",
+            }
+        ]
+    }
+    monkeypatch.setattr(poller_mod, "fetch_board", lambda *a, **k: ([_group()], [rec]))
+    monkeypatch.setattr(poller_mod, "load_config", lambda: config)
+
+    snapshot = Poller(refresh_seconds=30).poll_once()
+
+    assert [r.trip for r in snapshot.focus_rules] == ["morning-uptown"]
+
+
+def test_poll_once_degrades_gracefully_on_invalid_focus_rule(monkeypatch, caplog):
+    # Focus is an optional enhancement: a malformed [[focus]] block (here, an
+    # unknown trip) must NOT fail the poll and blank the board -- it's logged and
+    # focus is disabled, while the board itself still gets cached.
+    config = {
+        "focus": [{"trip": "ghost", "days": ["mon"], "start": "08:00", "end": "09:00"}]
+    }
+    monkeypatch.setattr(poller_mod, "fetch_board", lambda *a, **k: ([_group()], []))
+    monkeypatch.setattr(poller_mod, "load_config", lambda: config)
+
+    with caplog.at_level("WARNING"):
+        snapshot = Poller(refresh_seconds=30).poll_once()
+
+    assert snapshot.groups  # the board is still served
+    assert snapshot.focus_rules == []  # focus quietly disabled
+    assert "focus" in caplog.text.lower()
 
 
 def test_run_caches_snapshot_and_sleeps_normal_interval(monkeypatch):
