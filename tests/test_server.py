@@ -6,6 +6,7 @@ does *not* enter the app's lifespan (no ``with`` block), so the background poll
 task never starts and no network or live feeds are touched.
 """
 
+from dataclasses import replace
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -235,6 +236,19 @@ def test_build_state_focus_names_the_active_trip():
         [], NOW, recommendations=[_rec()], focus_trip="morning-uptown"
     )
     assert payload["focus"] == {"trip": "morning-uptown"}
+
+
+def test_build_state_focus_stays_on_a_no_target_trip():
+    # Owner's decision (#39): a focus rule firing on a day its trip has no target
+    # stays in focus and shows that state, rather than silently reverting to the
+    # glance board. So the directive is still emitted even when the focused trip's
+    # recommendation is no_target (the board renders FocusView's no_target branch).
+    no_target = replace(_rec(), status="no_target", target=None)
+    payload = server.build_state(
+        [], NOW, recommendations=[no_target], focus_trip="morning-uptown"
+    )
+    assert payload["focus"] == {"trip": "morning-uptown"}
+    assert payload["trips"][0]["status"] == "no_target"
 
 
 def test_build_state_serializes_recommendation_terminal_label():

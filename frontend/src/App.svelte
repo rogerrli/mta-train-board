@@ -42,11 +42,12 @@
   );
 
   // Scheduled focus mode (issue #39). When a focus rule is active the server sets
-  // `focus` = { trip, terminal, borough }; we dedicate the whole board to that
-  // trip's recommendation and hide every other station and trip. Look the trip up
-  // in the unfiltered trips[] (a focus rule can fire on a no-target misconfig, and
-  // we still show that state rather than silently reverting). If the named trip is
-  // somehow absent, fall through to the normal board.
+  // `focus` = { trip }, naming which trip to dedicate the whole board to (its
+  // recommendation, terminal label and all, is in trips[]); we render only that
+  // trip and hide every other station and trip. Look the trip up in the unfiltered
+  // trips[] (a focus rule can fire on a no-target misconfig, and we still show that
+  // state rather than silently reverting). If the named trip is somehow absent,
+  // fall through to the normal board.
   const focus = $derived($board.payload?.focus ?? null);
   const focusTrip = $derived.by(() => {
     if (!focus) return null;

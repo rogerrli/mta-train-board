@@ -32,7 +32,7 @@ from datetime import datetime
 from app.arrivals import ArrivalGroup
 from app.config import load_config
 from app.feeds import EASTERN
-from app.focus import FocusRule, resolve_focus_rules
+from app.focus import FocusConfigError, FocusRule, resolve_focus_rules
 from app.trips import TripRecommendation, fetch_board
 
 logger = logging.getLogger(__name__)
@@ -133,9 +133,15 @@ class Poller:
         config = load_config()
         groups, recommendations = fetch_board(config, now=now, board_limit=BOARD_LIMIT)
         # Resolve focus rules against the same config, validating each references a
-        # real trip (#39). A bad [[focus]] block fails the poll here -- served as
-        # 503/stale like any config error -- rather than crashing at import.
-        focus_rules = resolve_focus_rules(config, {r.name for r in recommendations})
+        # real trip (#39). Focus is an optional enhancement layered on the board, so
+        # a malformed [[focus]] block must not blank the whole board: log it and
+        # serve the board with focus disabled rather than failing the poll (which
+        # would strand /api/state at 503). Broader feed/trip errors still propagate.
+        try:
+            focus_rules = resolve_focus_rules(config, {r.name for r in recommendations})
+        except FocusConfigError as exc:
+            logger.warning("Ignoring invalid [[focus]] config; focus disabled: %s", exc)
+            focus_rules = []
         return Snapshot(
             groups=groups,
             updated_at=now,
