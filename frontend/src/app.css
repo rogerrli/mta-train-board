@@ -43,3 +43,32 @@ body {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
+
+/* Shared reset for a board control that must read as plain content -- a tapped
+   line row (issue #9) or station name (issue #10) -- while behaving as a button:
+   strip the native chrome, inherit type/color, and give consistent touch / hover
+   / focus feedback on the panel. Callers keep their own layout (size, padding,
+   radius); this owns only the reset + interaction states. */
+.tap-reset {
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s ease;
+}
+.tap-reset:active {
+  background: var(--panel-edge);
+}
+.tap-reset:focus-visible {
+  outline: 2px solid var(--text-dim);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .tap-reset:hover {
+    background: var(--panel-edge);
+  }
+}

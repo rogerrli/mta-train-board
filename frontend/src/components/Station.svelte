@@ -24,7 +24,7 @@
 
 <section class="station" style="flex-grow: {weight}">
   <h2 class="name">
-    <button type="button" class="name-btn" onclick={() => onstationselect(station.name)}>
+    <button type="button" class="name-btn tap-reset" onclick={() => onstationselect(station.name)}>
       {station.name}
     </button>
   </h2>
@@ -66,34 +66,14 @@
   }
 
   /* The name is a button (tap -> consolidated station view, issue #10) but must
-     read as the plain card heading: strip the native chrome and inherit type. */
+     read as the plain card heading. Chrome reset + tap/hover/focus feedback come
+     from the shared .tap-reset (app.css); this only sets its box + type. */
   .name-btn {
     display: block;
     width: 100%;
-    margin: 0;
     padding: clamp(0.1rem, 0.5vh, 0.3rem) clamp(0.15rem, 0.5vw, 0.4rem);
-    border: none;
     border-radius: clamp(0.3rem, 0.8vw, 0.6rem);
-    background: transparent;
-    color: inherit;
-    font: inherit;
     letter-spacing: inherit;
-    text-align: left;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 0.12s ease;
-  }
-  .name-btn:active {
-    background: var(--panel-edge);
-  }
-  .name-btn:focus-visible {
-    outline: 2px solid var(--text-dim);
-    outline-offset: 2px;
-  }
-  @media (hover: hover) {
-    .name-btn:hover {
-      background: var(--panel-edge);
-    }
   }
 
   .groups {
