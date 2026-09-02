@@ -35,6 +35,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.arrivals import Arrival, ArrivalGroup, route_color
 from app.feeds import EASTERN
+from app.focus import active_focus
 from app.poller import Poller
 from app.trips import TrainOption, TripRecommendation
 
@@ -116,6 +117,11 @@ def _serialize_recommendation(rec: TripRecommendation) -> dict[str, Any]:
         "color": route_color(rec.line),
         "direction": rec.direction,
         "destination": rec.destination,
+        # The boarding group's #41 terminal-station label for this (line, direction)
+        # (e.g. "Inwood-207 St" / "Man"); null when unlabeled. Focus mode (#39) shows
+        # it as the direction heading, falling back to destination when null.
+        "terminal": rec.terminal,
+        "borough": rec.borough,
         "target": rec.target.isoformat() if rec.target else None,
         "status": rec.status,
         "recommended": _serialize_train_option(rec.recommended),
@@ -128,6 +134,7 @@ def build_state(
     updated_at: datetime,
     *,
     recommendations: list[TripRecommendation] | None = None,
+    focus_trip: str | None = None,
     stale: bool = False,
     age_seconds: int = 0,
     refresh_interval_seconds: float = 30.0,
@@ -138,8 +145,10 @@ def build_state(
     board UI can render station by station. ``updated_at`` is the last successful
     poll time; ``stale``/``age_seconds`` (issue #6) let the UI flag old data.
     ``refresh_interval_seconds`` tells the board how often to re-poll this endpoint.
-    ``alerts`` is an empty placeholder until service alerts land in issue #13.
-    Pure and offline -- unit-testable.
+    ``focus_trip`` is the name of the trip a scheduled-focus rule (#39) has active
+    right now, or ``None``; when set, the payload's ``focus`` directive tells the
+    board to dedicate the screen to that trip. ``alerts`` is an empty placeholder
+    until service alerts land in issue #13. Pure and offline -- unit-testable.
     """
     # Insertion-ordered dict groups by station while preserving config order.
     stations: dict[str, dict[str, Any]] = {}
@@ -171,6 +180,10 @@ def build_state(
         "stations": list(stations.values()),
         # Arrive-by trip recommendations (#27); empty when no [[trips]] configured.
         "trips": [_serialize_recommendation(r) for r in (recommendations or [])],
+        # Active scheduled-focus directive (#39): which trip to dedicate the board
+        # to (its recommendation, terminal label and all, is in trips[] above),
+        # or null when no rule is active.
+        "focus": {"trip": focus_trip} if focus_trip is not None else None,
         "alerts": [],  # TODO(#13): service alerts for the watched lines.
     }
 
@@ -198,10 +211,15 @@ def state() -> dict[str, Any]:
             status_code=503, detail="Arrivals are temporarily unavailable."
         )
     now = datetime.now(EASTERN)
+    # Re-evaluate the focus window against the request clock (#39) -- the frontend
+    # polls on the refresh interval, so focus flips within a tick of the 08:00/09:00
+    # boundary regardless of when the last feed poll landed. First matching rule wins.
+    active = active_focus(snapshot.focus_rules, now)
     return build_state(
         snapshot.groups,
         snapshot.updated_at,
         recommendations=snapshot.recommendations,
+        focus_trip=active.trip if active else None,
         stale=poller.is_stale(snapshot, now=now),
         age_seconds=int(poller.age_seconds(snapshot, now=now)),
         refresh_interval_seconds=poller.refresh_seconds,

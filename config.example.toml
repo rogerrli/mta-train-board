@@ -271,3 +271,30 @@ destination = "59 St-Columbus Circle"
 [trips.target]
 default = "09:00"
 tue = "08:45"
+
+# Scheduled focus mode (issue #39) --------------------------------------------
+#
+# By default the board is a general glance view. But for a known daily commute
+# there's really only ONE train that matters in a given window. A focus rule
+# dedicates the WHOLE screen to a single trip's arrive-by recommendation during a
+# configured time window, hiding every other station and train -- then returns to
+# the normal glance board when the window ends. Add one [[focus]] block per rule;
+# with none, the board always shows the glance view (today's behavior).
+#
+#   trip   The [[trips]] name to focus on (above). The target arrival time is
+#          owned by that trip -- a focus rule never redefines it, it just says
+#          "when the board should dedicate itself to this trip".
+#   days   Which weekdays the rule is active, as abbreviations (mon..sun).
+#   start  Window start, Eastern 24h "HH:MM" (inclusive).
+#   end    Window end, Eastern 24h "HH:MM" (exclusive). Must be after `start`;
+#          a window crossing midnight isn't supported -- split it into two rules.
+#
+# The board re-checks the active rule on every refresh, so focus flips in/out
+# right around the boundary. If two rules ever overlap, the FIRST one listed wins.
+
+# Example: weekday mornings 08:00-09:00, focus the board on the morning-uptown A.
+[[focus]]
+trip = "morning-uptown"
+days = ["mon", "tue", "wed", "thu", "fri"]
+start = "08:00"
+end = "09:00"

@@ -6,7 +6,7 @@ does *not* enter the app's lifespan (no ``with`` block), so the background poll
 task never starts and no network or live feeds are touched.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app import server
 from app.arrivals import Arrival, ArrivalGroup
+from app.focus import FocusRule
 from app.poller import Snapshot
 from app.trips import TrainOption, TripRecommendation
 
@@ -116,6 +117,7 @@ def test_build_state_empty_when_no_groups():
         "refresh_interval_seconds": 30.0,
         "stations": [],
         "trips": [],
+        "focus": None,
         "alerts": [],
     }
 
@@ -206,6 +208,47 @@ def test_build_state_exposes_terminal_and_borough():
     assert (fallback["terminal"], fallback["borough"]) == (None, None)
 
 
+def _rec(name="morning-uptown", line="A", direction="N", terminal=None, borough=None):
+    return TripRecommendation(
+        name=name,
+        boarding="Fulton St",
+        line=line,
+        direction=direction,
+        destination="59 St-Columbus Circle",
+        target=NOW.replace(hour=9),
+        status="on_time",
+        terminal=terminal,
+        borough=borough,
+    )
+
+
+def test_build_state_focus_null_by_default():
+    # No active focus rule -> focus directive is null (normal glance board #39).
+    payload = server.build_state([], NOW, recommendations=[_rec()])
+    assert payload["focus"] is None
+
+
+def test_build_state_focus_names_the_active_trip():
+    # An active focus trip -> the directive just names which trip the board is
+    # dedicated to; its recommendation (terminal label and all) rides in trips[].
+    payload = server.build_state(
+        [], NOW, recommendations=[_rec()], focus_trip="morning-uptown"
+    )
+    assert payload["focus"] == {"trip": "morning-uptown"}
+
+
+def test_build_state_serializes_recommendation_terminal_label():
+    # The #41 terminal-station label rides on the recommendation (resolved from its
+    # boarding group in app.trips), so focus mode reads it without re-joining groups.
+    rec = _rec(terminal="Inwood-207 St", borough="Man")
+    (trip,) = server.build_state([], NOW, recommendations=[rec])["trips"]
+    assert (trip["terminal"], trip["borough"]) == ("Inwood-207 St", "Man")
+
+    # Unlabeled (line, direction) -> null, and the board falls back to destination.
+    (bare,) = server.build_state([], NOW, recommendations=[_rec()])["trips"]
+    assert (bare["terminal"], bare["borough"]) == (None, None)
+
+
 # --- endpoints ---------------------------------------------------------------
 
 
@@ -248,6 +291,54 @@ def test_state_returns_503_before_first_poll(client: TestClient):
     assert resp.status_code == 503
     # A stable, generic message -- no internal detail leaked to clients.
     assert resp.json()["detail"] == "Arrivals are temporarily unavailable."
+
+
+class _FixedClock:
+    """Stand-in for the ``datetime`` the endpoint uses, with a pinned ``now``."""
+
+    def __init__(self, value):
+        self._value = value
+
+    def now(self, tz=None):
+        return self._value
+
+
+def _focus_snapshot(when):
+    """A fresh snapshot with a morning-uptown rec + an 08:00-09:00 weekday rule."""
+    rule = FocusRule(
+        trip="morning-uptown",
+        days=frozenset({0, 1, 2, 3, 4}),
+        start=time(8, 0),
+        end=time(9, 0),
+    )
+    return Snapshot(
+        groups=[],
+        updated_at=when,
+        recommendations=[_rec(terminal="Inwood-207 St")],
+        focus_rules=[rule],
+    )
+
+
+def test_state_activates_focus_inside_the_window(client: TestClient, monkeypatch):
+    # A weekday inside 08:00-09:00 -> the endpoint re-checks the window against the
+    # request clock (#39) and names the focused trip; its terminal label rides in
+    # trips[] on the recommendation.
+    when = datetime(2026, 9, 2, 8, 30, tzinfo=EASTERN)  # Wednesday
+    server.poller._snapshot = _focus_snapshot(when)
+    monkeypatch.setattr(server, "datetime", _FixedClock(when))
+
+    body = client.get("/api/state").json()
+    assert body["focus"] == {"trip": "morning-uptown"}
+    assert body["trips"][0]["terminal"] == "Inwood-207 St"
+
+
+def test_state_no_focus_outside_the_window(client: TestClient, monkeypatch):
+    # Same snapshot, but the request clock is before the window -> normal board.
+    when = datetime(2026, 9, 2, 7, 30, tzinfo=EASTERN)
+    server.poller._snapshot = _focus_snapshot(when)
+    monkeypatch.setattr(server, "datetime", _FixedClock(when))
+
+    assert client.get("/api/state").json()["focus"] is None
 
 
 def test_frontend_served_from_same_origin(client: TestClient):

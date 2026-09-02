@@ -15,8 +15,10 @@ import pytest
 from app import poller as poller_mod
 from app.arrivals import ArrivalGroup
 from app.feeds import FeedError
+from app.focus import FocusConfigError
 from app.poller import Poller, Snapshot
 from app.stops import StationResolutionError
+from app.trips import TripRecommendation
 
 EASTERN = ZoneInfo("America/New_York")
 NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=EASTERN)
@@ -109,6 +111,50 @@ def test_poll_once_requests_the_deeper_board_limit(monkeypatch):
 
     assert captured["board_limit"] == poller_mod.BOARD_LIMIT
     assert poller_mod.BOARD_LIMIT > 4  # deeper than the glance renders
+
+
+def test_poll_once_resolves_focus_rules_onto_the_snapshot(monkeypatch):
+    # Scheduled focus (#39): each poll resolves [[focus]] rules from the same
+    # config, validated against the recommendations' trip names, and stores them on
+    # the snapshot for the API to evaluate at request time.
+    rec = TripRecommendation(
+        name="morning-uptown",
+        boarding="Fulton St",
+        line="A",
+        direction="N",
+        destination="59 St-Columbus Circle",
+        target=None,
+        status="no_target",
+    )
+    config = {
+        "focus": [
+            {
+                "trip": "morning-uptown",
+                "days": ["mon"],
+                "start": "08:00",
+                "end": "09:00",
+            }
+        ]
+    }
+    monkeypatch.setattr(poller_mod, "fetch_board", lambda *a, **k: ([_group()], [rec]))
+    monkeypatch.setattr(poller_mod, "load_config", lambda: config)
+
+    snapshot = Poller(refresh_seconds=30).poll_once()
+
+    assert [r.trip for r in snapshot.focus_rules] == ["morning-uptown"]
+
+
+def test_poll_once_rejects_focus_rule_for_unknown_trip(monkeypatch):
+    # A [[focus]] block pointing at a non-existent trip fails the poll (surfaced as
+    # stale/503 by the loop) rather than silently doing nothing.
+    config = {
+        "focus": [{"trip": "ghost", "days": ["mon"], "start": "08:00", "end": "09:00"}]
+    }
+    monkeypatch.setattr(poller_mod, "fetch_board", lambda *a, **k: ([_group()], []))
+    monkeypatch.setattr(poller_mod, "load_config", lambda: config)
+
+    with pytest.raises(FocusConfigError):
+        Poller(refresh_seconds=30).poll_once()
 
 
 def test_run_caches_snapshot_and_sleeps_normal_interval(monkeypatch):

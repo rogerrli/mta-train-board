@@ -32,6 +32,7 @@ from datetime import datetime
 from app.arrivals import ArrivalGroup
 from app.config import load_config
 from app.feeds import EASTERN
+from app.focus import FocusRule, resolve_focus_rules
 from app.trips import TripRecommendation, fetch_board
 
 logger = logging.getLogger(__name__)
@@ -55,12 +56,16 @@ class Snapshot:
     """The last successfully computed board and the time it was polled.
 
     ``recommendations`` are the arrive-by trip picks (#27), computed from the same
-    poll; empty when no ``[[trips]]`` are configured.
+    poll; empty when no ``[[trips]]`` are configured. ``focus_rules`` are the
+    resolved scheduled-focus rules (#39); the API decides which (if any) is active
+    at request time, so they ride along with the snapshot rather than being frozen
+    at poll time. Empty when no ``[[focus]]`` blocks are configured.
     """
 
     groups: list[ArrivalGroup]
     updated_at: datetime
     recommendations: list[TripRecommendation] = field(default_factory=list)
+    focus_rules: list[FocusRule] = field(default_factory=list)
 
 
 class Poller:
@@ -125,10 +130,18 @@ class Poller:
         # tables from disk every poll (see the note in app/feeds.py:parse_feed).
         # A perf win for the Pi is to build one NYCTFeed and reuse it via
         # load_gtfs_bytes() across polls; deferred to keep this issue in its lane.
-        groups, recommendations = fetch_board(
-            load_config(), now=now, board_limit=BOARD_LIMIT
+        config = load_config()
+        groups, recommendations = fetch_board(config, now=now, board_limit=BOARD_LIMIT)
+        # Resolve focus rules against the same config, validating each references a
+        # real trip (#39). A bad [[focus]] block fails the poll here -- served as
+        # 503/stale like any config error -- rather than crashing at import.
+        focus_rules = resolve_focus_rules(config, {r.name for r in recommendations})
+        return Snapshot(
+            groups=groups,
+            updated_at=now,
+            recommendations=recommendations,
+            focus_rules=focus_rules,
         )
-        return Snapshot(groups=groups, updated_at=now, recommendations=recommendations)
 
     async def _run(self) -> None:
         """Poll loop: refresh on success, back off exponentially on failure."""

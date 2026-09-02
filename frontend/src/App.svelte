@@ -4,6 +4,7 @@
   import Station from "./components/Station.svelte";
   import TrainDetail from "./components/TrainDetail.svelte";
   import Recommendation from "./components/Recommendation.svelte";
+  import FocusView from "./components/FocusView.svelte";
 
   const board = createBoard();
 
@@ -39,6 +40,18 @@
   const trips = $derived(
     ($board.payload?.trips ?? []).filter((t) => t.status !== "no_target"),
   );
+
+  // Scheduled focus mode (issue #39). When a focus rule is active the server sets
+  // `focus` = { trip, terminal, borough }; we dedicate the whole board to that
+  // trip's recommendation and hide every other station and trip. Look the trip up
+  // in the unfiltered trips[] (a focus rule can fire on a no-target misconfig, and
+  // we still show that state rather than silently reverting). If the named trip is
+  // somehow absent, fall through to the normal board.
+  const focus = $derived($board.payload?.focus ?? null);
+  const focusTrip = $derived.by(() => {
+    if (!focus) return null;
+    return ($board.payload?.trips ?? []).find((t) => t.name === focus.trip) ?? null;
+  });
 </script>
 
 <div class="board">
@@ -55,33 +68,37 @@
     </div>
   {:else}
     <StatusBar payload={$board.payload} offline={$board.offline} {now} />
-    {#if trips.length > 0}
-      <div class="recommendations">
-        {#each trips as trip (trip.name)}
-          <Recommendation {trip} {now} />
-        {/each}
-      </div>
-    {/if}
-    {#if stations.length === 0}
-      <div class="center">
-        <p>No stations configured.</p>
-        <p class="hint">Add <code>[[stations]]</code> blocks to your config.</p>
-      </div>
+    {#if focusTrip}
+      <FocusView trip={focusTrip} {now} />
     {:else}
-      <div class="stations">
-        {#each stations as station (station.name)}
-          <Station
-            {station}
-            {now}
-            onselect={(name, index) => (selected = { station: name, index })}
-          />
-        {/each}
-      </div>
+      {#if trips.length > 0}
+        <div class="recommendations">
+          {#each trips as trip (trip.name)}
+            <Recommendation {trip} {now} />
+          {/each}
+        </div>
+      {/if}
+      {#if stations.length === 0}
+        <div class="center">
+          <p>No stations configured.</p>
+          <p class="hint">Add <code>[[stations]]</code> blocks to your config.</p>
+        </div>
+      {:else}
+        <div class="stations">
+          {#each stations as station (station.name)}
+            <Station
+              {station}
+              {now}
+              onselect={(name, index) => (selected = { station: name, index })}
+            />
+          {/each}
+        </div>
+      {/if}
     {/if}
   {/if}
 </div>
 
-{#if selectedGroup}
+{#if selectedGroup && !focusTrip}
   <TrainDetail
     group={selectedGroup}
     station={selected.station}
