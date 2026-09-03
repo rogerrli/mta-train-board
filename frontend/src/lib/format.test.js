@@ -8,6 +8,7 @@ import {
   minutesUntil,
   classify,
   countdownLabel,
+  formatDuration,
   liveArrivals,
   agoLabel,
   bulletTextColor,
@@ -53,10 +54,20 @@ test("classify honors a custom grace window", () => {
   assert.equal(DEFAULT_WALK_DELTA, 1);
 });
 
-test("countdownLabel shows Due under a minute out, the number otherwise", () => {
+test("formatDuration shows a bare count under an hour, Hh Mm at or above (issue #56)", () => {
+  assert.equal(formatDuration(0), "0");
+  assert.equal(formatDuration(59), "59"); // under an hour -> unchanged
+  assert.equal(formatDuration(60), "1h"); // exact hour drops the minutes
+  assert.equal(formatDuration(75), "1h 15m");
+  assert.equal(formatDuration(120), "2h"); // exact hour, no "2h 0m"
+  assert.equal(formatDuration(413), "6h 53m");
+});
+
+test("countdownLabel shows Due under a minute out, the compact duration otherwise", () => {
   assert.equal(countdownLabel(0), "Due"); // <1 min -> "Due", never "0"
   assert.equal(countdownLabel(1), "1");
   assert.equal(countdownLabel(12), "12");
+  assert.equal(countdownLabel(75), "1h 15m"); // 60+ min out rolls over (issue #56)
 });
 
 test("liveArrivals drops departed trains and attaches fresh minutes/catchability", () => {

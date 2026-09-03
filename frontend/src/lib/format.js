@@ -35,12 +35,24 @@ export function minutesUntil(arrivalIso, now = Date.now()) {
   return Math.floor((arrivalMs - now) / 60000);
 }
 
+// Compact whole-minute duration: a bare count under an hour, "Hh Mm" at or
+// above one (59 -> "59", 60 -> "1h", 75 -> "1h 15m", 413 -> "6h 53m"). Exact
+// hours drop the minutes ("2h", not "2h 0m"). Shared by every duration site
+// (countdowns, arrive-by lateness, "leave in") so nothing renders an absurd
+// bare "413" and the hour rollover stays one rule (issue #56).
+export function formatDuration(minutes) {
+  if (minutes < 60) return String(minutes);
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
 // Display label for a floored countdown. `liveArrivals` already drops departed
 // trains, so `minutes` is >= 0 here; 0 means under a minute out, which reads as
 // a bug as the bare number "0" (and worse in the HURRY band). Show "Due" for it
-// (transit convention), the plain number otherwise.
+// (transit convention), the compact duration otherwise.
 export function countdownLabel(minutes) {
-  return minutes < 1 ? "Due" : String(minutes);
+  return minutes < 1 ? "Due" : formatDuration(minutes);
 }
 
 // Classify a train `minutes` out against a station's `walkMinutes`. Mirrors the
