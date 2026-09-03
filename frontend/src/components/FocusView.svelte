@@ -6,6 +6,7 @@
     formatDuration,
   } from "../lib/format.js";
   import SplitFlap from "./SplitFlap.svelte";
+  import CloseButton from "./CloseButton.svelte";
 
   // Scheduled focus mode (issue #39): during a configured window the board drops
   // everything else and dedicates the whole screen to one trip's arrive-by
@@ -15,7 +16,13 @@
   // The layout is a full-screen sibling of Recommendation.svelte (the glance-strip
   // card) -- they share the status/leave logic below, so keep them in sync.
   // "Leave in N min" ticks down every second off the shared `now` clock.
-  let { trip, now } = $props();
+  //
+  // Dismiss (#60): during an active focus window the owner can drop back to the
+  // glance board without waiting for the window to end. `ondismiss` fires from
+  // either affordance -- the corner ✕ or a tap anywhere on the card (a full-bleed
+  // button behind the display-only content). App owns the dismiss state and the
+  // auto-return.
+  let { trip, now, ondismiss } = $props();
 
   const rec = $derived(trip.recommended);
   const textColor = $derived(bulletTextColor(trip.color));
@@ -27,7 +34,20 @@
 </script>
 
 <section class="focus {trip.status}">
-  <header class="head">
+  <!-- Tap-anywhere dismiss: a full-bleed button behind the display-only content
+       (which is pointer-events:none, see .content), so any tap on the card lands
+       here. Hidden from AT and the tab order (mirrors Modal's backdrop) -- the
+       corner ✕ (shared CloseButton) is the announced, keyboard-reachable close. -->
+  <button
+    class="dismiss-layer"
+    aria-hidden="true"
+    tabindex="-1"
+    onclick={ondismiss}
+  ></button>
+  <CloseButton label="Back to the board" onclose={ondismiss} />
+
+  <div class="content">
+    <header class="head">
     <span
       class="bullet"
       style="background:{trip.color}; color:{textColor}"
@@ -89,7 +109,8 @@
         <span class="lunit">{leaveIn < 60 ? "min to leave" : "to leave"}</span>
       {/if}
     </div>
-  {/if}
+    {/if}
+  </div>
 </section>
 
 <style>
@@ -99,6 +120,11 @@
   .focus {
     /* The card sits on --panel; match it so the flip tiles occlude cleanly. */
     --flap-bg: var(--panel);
+    /* Bump the shared CloseButton up from its modal-panel default -- this card is
+       full-screen, so the ✕ wants a bigger touch target. */
+    --close-size: clamp(2.6rem, 6vh, 3.4rem);
+    --close-font: clamp(1.1rem, 2.8vh, 1.5rem);
+    position: relative;
     flex: 1;
     min-height: 0;
     display: flex;
@@ -118,6 +144,32 @@
   .focus.no_estimate,
   .focus.no_target {
     border-top-color: var(--hurry);
+  }
+
+  /* Display-only content: neutralize its pointer events so every tap on the card
+     reaches the dismiss layer. Not redundant with the dismiss layer -- the flip
+     digits (SplitFlap tiles) are `position: relative`, so they'd otherwise paint
+     above the layer and swallow taps that land on the countdown numbers.
+     `display: contents` keeps head/body/leave as direct flex children of .focus,
+     so the centered layout is unchanged; pointer-events:none inherits into them. */
+  .content {
+    display: contents;
+  }
+  .content > * {
+    pointer-events: none;
+  }
+
+  /* Full-bleed tap target behind the content -- tap anywhere to dismiss; the
+     shared CloseButton (z-index 2) still sits above it. */
+  .dismiss-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border: none;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .head {
