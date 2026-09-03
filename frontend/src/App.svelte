@@ -6,6 +6,7 @@
   import StationDetail from "./components/StationDetail.svelte";
   import Recommendation from "./components/Recommendation.svelte";
   import FocusView from "./components/FocusView.svelte";
+  import FocusReturn from "./components/FocusReturn.svelte";
 
   const board = createBoard();
 
@@ -66,6 +67,25 @@
     if (!focus) return null;
     return ($board.payload?.trips ?? []).find((t) => t.name === focus.trip) ?? null;
   });
+
+  // Dismiss the focus view mid-window (issue #60). The server keeps sending the
+  // focus directive for the whole window; the frontend decides whether to honor
+  // it. `dismissed` drops us back to the glance board without waiting for the
+  // window to end and survives polls/ticks (plain in-memory state, per-session --
+  // a reload starts fresh, fine for a wall device that rarely reloads). A new
+  // window re-arms focus automatically: when `focus` transitions from absent to
+  // present we clear the flag. While dismissed, a return affordance (FocusReturn)
+  // sits on the glance board and auto-returns after an idle timeout.
+  let dismissed = $state(false);
+  let focusWasActive = false;
+  $effect(() => {
+    const active = focus != null;
+    if (active && !focusWasActive) dismissed = false; // off -> on: new window re-arms
+    focusWasActive = active;
+  });
+
+  // The takeover shows only when a focus trip resolves and we haven't dismissed it.
+  const showFocus = $derived(!!focusTrip && !dismissed);
 </script>
 
 <div class="board">
@@ -82,8 +102,8 @@
     </div>
   {:else}
     <StatusBar payload={$board.payload} offline={$board.offline} {now} />
-    {#if focusTrip}
-      <FocusView trip={focusTrip} {now} />
+    {#if showFocus}
+      <FocusView trip={focusTrip} {now} ondismiss={() => (dismissed = true)} />
     {:else}
       {#if trips.length > 0}
         <div class="recommendations">
@@ -119,7 +139,13 @@
   {/if}
 </div>
 
-{#if selectedGroup && !focusTrip}
+<!-- Focus window active but dismissed: offer a way back in, and auto-return when
+     the idle countdown empties (#60). -->
+{#if focusTrip && dismissed}
+  <FocusReturn onreturn={() => (dismissed = false)} />
+{/if}
+
+{#if selectedGroup && !showFocus}
   <TrainDetail
     group={selectedGroup}
     station={selected.station}
@@ -128,7 +154,7 @@
   />
 {/if}
 
-{#if selectedStationObj && !focusTrip}
+{#if selectedStationObj && !showFocus}
   <StationDetail
     station={selectedStationObj}
     {now}
