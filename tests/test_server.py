@@ -197,14 +197,14 @@ def test_build_state_exposes_terminal_and_borough():
             "N",
             [_arrival(3)],
             terminal="96 St-2 Av",
-            borough="Man",
+            borough="Manhattan",
         ),
         _group("14 St-Union Sq", "R", "S", [_arrival(5)]),
     ]
     payload = server.build_state(groups, NOW)
 
     labeled, fallback = payload["stations"][0]["arrivals"]
-    assert (labeled["terminal"], labeled["borough"]) == ("96 St-2 Av", "Man")
+    assert (labeled["terminal"], labeled["borough"]) == ("96 St-2 Av", "Manhattan")
     assert labeled["direction_label"] == "Northbound"
     assert (fallback["terminal"], fallback["borough"]) == (None, None)
 
@@ -254,9 +254,9 @@ def test_build_state_focus_stays_on_a_no_target_trip():
 def test_build_state_serializes_recommendation_terminal_label():
     # The #41 terminal-station label rides on the recommendation (resolved from its
     # boarding group in app.trips), so focus mode reads it without re-joining groups.
-    rec = _rec(terminal="Inwood-207 St", borough="Man")
+    rec = _rec(terminal="Inwood-207 St", borough="Manhattan")
     (trip,) = server.build_state([], NOW, recommendations=[rec])["trips"]
-    assert (trip["terminal"], trip["borough"]) == ("Inwood-207 St", "Man")
+    assert (trip["terminal"], trip["borough"]) == ("Inwood-207 St", "Manhattan")
 
     # Unlabeled (line, direction) -> null, and the board falls back to destination.
     (bare,) = server.build_state([], NOW, recommendations=[_rec()])["trips"]

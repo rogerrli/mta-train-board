@@ -115,7 +115,7 @@ class DirectionLabel:
 
     ``terminal`` is the destination the board shows in place of the compass word
     (e.g. "Inwood-207 St"); ``borough`` is the smaller secondary text (e.g.
-    "Man"). Both are author-written free text, so a branchy direction can carry a
+    "Manhattan"). Both are author-written free text, so a branchy direction can carry a
     combined label ("Rockaway / Lefferts"). Both are required together.
     """
 

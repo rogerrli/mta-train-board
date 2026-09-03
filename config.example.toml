@@ -87,7 +87,8 @@ walk_minutes = 4
 #              direction (e.g. the southbound A splits to Far Rockaway / Ozone
 #              Park / Lefferts) write whatever combined label reads best, e.g.
 #              terminal = "Rockaway / Lefferts".
-#   borough    Smaller secondary text. Convention: Man / Bklyn / Bx / Qns / SI.
+#   borough    Smaller secondary text. Use the full borough name:
+#              Manhattan / Brooklyn / Bronx / Queens / Staten Island.
 #
 # A (line, direction) with no block here falls back to "Northbound"/"Southbound",
 # so you only need to label the ones you watch. The blocks below cover the
@@ -98,136 +99,136 @@ walk_minutes = 4
 line = "1"
 direction = "N"
 terminal = "Van Cortlandt Park-242 St"
-borough = "Bx"
+borough = "Bronx"
 
 [[direction_labels]]
 line = "1"
 direction = "S"
 terminal = "South Ferry"
-borough = "Man"
+borough = "Manhattan"
 
 [[direction_labels]]
 line = "2"
 direction = "N"
 terminal = "Wakefield-241 St"
-borough = "Bx"
+borough = "Bronx"
 
 [[direction_labels]]
 line = "2"
 direction = "S"
 terminal = "Flatbush Av-Brooklyn College"
-borough = "Bklyn"
+borough = "Brooklyn"
 
 [[direction_labels]]
 line = "3"
 direction = "N"
 terminal = "Harlem-148 St"
-borough = "Man"
+borough = "Manhattan"
 
 [[direction_labels]]
 line = "3"
 direction = "S"
 terminal = "New Lots Av"
-borough = "Bklyn"
+borough = "Brooklyn"
 
 # N/Q/R/W at Times Sq-42 St.
 [[direction_labels]]
 line = "N"
 direction = "N"
 terminal = "Astoria-Ditmars Blvd"
-borough = "Qns"
+borough = "Queens"
 
 [[direction_labels]]
 line = "N"
 direction = "S"
 terminal = "Coney Island-Stillwell Av"
-borough = "Bklyn"
+borough = "Brooklyn"
 
 [[direction_labels]]
 line = "Q"
 direction = "N"
 terminal = "96 St-2 Av"
-borough = "Man"
+borough = "Manhattan"
 
 [[direction_labels]]
 line = "Q"
 direction = "S"
 terminal = "Coney Island-Stillwell Av"
-borough = "Bklyn"
+borough = "Brooklyn"
 
 [[direction_labels]]
 line = "R"
 direction = "N"
 terminal = "Forest Hills-71 Av"
-borough = "Qns"
+borough = "Queens"
 
 [[direction_labels]]
 line = "R"
 direction = "S"
 terminal = "Bay Ridge-95 St"
-borough = "Bklyn"
+borough = "Brooklyn"
 
 [[direction_labels]]
 line = "W"
 direction = "N"
 terminal = "Astoria-Ditmars Blvd"
-borough = "Qns"
+borough = "Queens"
 
 [[direction_labels]]
 line = "W"
 direction = "S"
 terminal = "Whitehall St"
-borough = "Man"
+borough = "Manhattan"
 
 # 4/5/6 at Grand Central-42 St.
 [[direction_labels]]
 line = "4"
 direction = "N"
 terminal = "Woodlawn"
-borough = "Bx"
+borough = "Bronx"
 
 [[direction_labels]]
 line = "4"
 direction = "S"
 terminal = "Crown Hts-Utica Av"
-borough = "Bklyn"
+borough = "Brooklyn"
 
 [[direction_labels]]
 line = "5"
 direction = "N"
 terminal = "Eastchester-Dyre Av"
-borough = "Bx"
+borough = "Bronx"
 
 [[direction_labels]]
 line = "5"
 direction = "S"
 terminal = "Flatbush Av-Brooklyn College"
-borough = "Bklyn"
+borough = "Brooklyn"
 
 [[direction_labels]]
 line = "6"
 direction = "N"
 terminal = "Pelham Bay Park"
-borough = "Bx"
+borough = "Bronx"
 
 [[direction_labels]]
 line = "6"
 direction = "S"
 terminal = "Brooklyn Bridge-City Hall"
-borough = "Man"
+borough = "Manhattan"
 
 # A/C at Fulton St (Manhattan-bound only above).
 [[direction_labels]]
 line = "A"
 direction = "N"
 terminal = "Inwood-207 St"
-borough = "Man"
+borough = "Manhattan"
 
 [[direction_labels]]
 line = "C"
 direction = "N"
 terminal = "168 St"
-borough = "Man"
+borough = "Manhattan"
 
 # Arrive-by trips (issue #27) -----------------------------------------------
 #

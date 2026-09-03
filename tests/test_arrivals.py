@@ -239,12 +239,12 @@ def test_attaches_direction_label_color_and_headsign():
 
 def test_labels_group_with_configured_terminal_and_borough():
     station = _station(lines=("Q",), directions=("N",))
-    labels = {("Q", "N"): DirectionLabel(terminal="96 St-2 Av", borough="Man")}
+    labels = {("Q", "N"): DirectionLabel(terminal="96 St-2 Av", borough="Manhattan")}
     (group,) = compute_arrivals(
         [station], [_update("Q", "R30N", 3)], now=NOW, direction_labels=labels
     )
     assert group.terminal == "96 St-2 Av"
-    assert group.borough == "Man"
+    assert group.borough == "Manhattan"
     # The compass label stays populated as the fallback the UI can still use.
     assert group.direction_label == "Northbound"
 
@@ -252,14 +252,14 @@ def test_labels_group_with_configured_terminal_and_borough():
 def test_unconfigured_direction_falls_back_to_compass():
     # A label for N only; the S group must fall back rather than borrow it.
     station = _station(lines=("Q",), directions=("N", "S"))
-    labels = {("Q", "N"): DirectionLabel(terminal="96 St-2 Av", borough="Man")}
+    labels = {("Q", "N"): DirectionLabel(terminal="96 St-2 Av", borough="Manhattan")}
     north, south = compute_arrivals(
         [station],
         [_update("Q", "R30N", 3), _update("Q", "R30S", 3)],
         now=NOW,
         direction_labels=labels,
     )
-    assert (north.terminal, north.borough) == ("96 St-2 Av", "Man")
+    assert (north.terminal, north.borough) == ("96 St-2 Av", "Manhattan")
     assert (south.terminal, south.borough) == (None, None)
     assert south.direction_label == "Southbound"
 
@@ -271,19 +271,21 @@ def test_parse_direction_labels_builds_map():
                 "line": "A",
                 "direction": "N",
                 "terminal": "Inwood-207 St",
-                "borough": "Man",
+                "borough": "Manhattan",
             },
             {
                 "line": "A",
                 "direction": "S",
                 "terminal": "Rockaway / Lefferts",
-                "borough": "Qns/Bklyn",
+                "borough": "Queens/Brooklyn",
             },
         ]
     }
     labels = parse_direction_labels(config)
-    assert labels[("A", "N")] == DirectionLabel("Inwood-207 St", "Man")
-    assert labels[("A", "S")] == DirectionLabel("Rockaway / Lefferts", "Qns/Bklyn")
+    assert labels[("A", "N")] == DirectionLabel("Inwood-207 St", "Manhattan")
+    assert labels[("A", "S")] == DirectionLabel(
+        "Rockaway / Lefferts", "Queens/Brooklyn"
+    )
 
 
 def test_parse_direction_labels_empty_when_absent():
@@ -293,12 +295,12 @@ def test_parse_direction_labels_empty_when_absent():
 @pytest.mark.parametrize(
     "entry",
     [
-        {"direction": "N", "terminal": "T", "borough": "Man"},  # no line
-        {"line": "A", "terminal": "T", "borough": "Man"},  # no direction
-        {"line": "A", "direction": "N", "borough": "Man"},  # no terminal
+        {"direction": "N", "terminal": "T", "borough": "Manhattan"},  # no line
+        {"line": "A", "terminal": "T", "borough": "Manhattan"},  # no direction
+        {"line": "A", "direction": "N", "borough": "Manhattan"},  # no terminal
         {"line": "A", "direction": "N", "terminal": "T"},  # no borough
-        {"line": "A", "direction": "N", "terminal": "", "borough": "Man"},  # blank
-        {"line": "A", "direction": "E", "terminal": "T", "borough": "Man"},  # bad dir
+        {"line": "A", "direction": "N", "terminal": "", "borough": "Bronx"},  # blank
+        {"line": "A", "direction": "E", "terminal": "T", "borough": "Bronx"},  # bad dir
     ],
 )
 def test_parse_direction_labels_rejects_malformed_entry(entry):
@@ -307,7 +309,7 @@ def test_parse_direction_labels_rejects_malformed_entry(entry):
 
 
 def test_parse_direction_labels_rejects_duplicate():
-    dup = {"line": "A", "direction": "N", "terminal": "T", "borough": "Man"}
+    dup = {"line": "A", "direction": "N", "terminal": "T", "borough": "Manhattan"}
     with pytest.raises(ValueError, match="[Dd]uplicate"):
         parse_direction_labels({"direction_labels": [dup, dup]})
 

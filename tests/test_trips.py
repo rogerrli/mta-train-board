@@ -217,9 +217,9 @@ def test_recommendation_carries_boarding_group_terminal_label():
     # so focus mode (#39) can name the direction without re-joining the board.
     trip = _trip()
     now = WEDNESDAY_7_40
-    group = _group(trip, [10], now, terminal="Inwood-207 St", borough="Man")
+    group = _group(trip, [10], now, terminal="Inwood-207 St", borough="Manhattan")
     rec = recommend_trip(trip, group, now, travel_time=_fixed_ride(40))
-    assert (rec.terminal, rec.borough) == ("Inwood-207 St", "Man")
+    assert (rec.terminal, rec.borough) == ("Inwood-207 St", "Manhattan")
 
 
 def test_leave_by_and_leave_in_are_correct():
