@@ -44,6 +44,7 @@ def _trip(
     dest="A24",
     target=None,
     buffer=0.0,
+    show_before=None,
 ) -> ResolvedTrip:
     return ResolvedTrip(
         name="morning-uptown",
@@ -55,6 +56,7 @@ def _trip(
         dest_stop=dest,
         target=dict(TARGET if target is None else target),
         arrive_buffer_minutes=buffer,
+        show_before_minutes=show_before,
     )
 
 
@@ -126,6 +128,42 @@ def test_arrive_buffer_shifts_target_earlier():
     trip = _trip(target={"tue": "08:15"}, buffer=5)
     target = trip.effective_target(TUESDAY_7_40)
     assert (target.hour, target.minute) == (8, 10)
+
+
+# --- recommendation strip lead-in window (#50) -------------------------------
+
+
+def _rec(now, *, show_before=None):
+    """A TripRecommendation for the fixed trip at ``now`` (target from TARGET)."""
+    trip = _trip(show_before=show_before)
+    return recommend_trip(
+        trip, _group(trip, [10, 20], now), now, travel_time=_fixed_ride(20)
+    )
+
+
+def test_no_window_is_visible_all_day_on_a_target_day():
+    # Without show_before_minutes the strip keeps its original all-day behavior.
+    rec = _rec(TUESDAY_7_40)  # Tuesday target 08:15
+    assert rec.show_before_minutes is None
+    assert rec.visible_at(datetime(2026, 9, 1, 5, 0, tzinfo=EASTERN)) is True
+    assert rec.visible_at(datetime(2026, 9, 1, 20, 0, tzinfo=EASTERN)) is True
+
+
+def test_no_target_day_is_never_visible():
+    # A no-target day (weekend, default-only table) has nothing to show, window or not.
+    rec = _rec(SATURDAY_7_40, show_before=90)
+    assert rec.target is None
+    assert rec.visible_at(SATURDAY_7_40) is False
+
+
+def test_lead_in_window_hides_outside_and_shows_inside():
+    # Tuesday target 08:15, 90-min lead -> visible only in [06:45, 08:15].
+    rec = _rec(TUESDAY_7_40, show_before=90)
+    assert rec.visible_at(datetime(2026, 9, 1, 6, 0, tzinfo=EASTERN)) is False
+    assert rec.visible_at(datetime(2026, 9, 1, 6, 45, tzinfo=EASTERN)) is True
+    assert rec.visible_at(datetime(2026, 9, 1, 7, 30, tzinfo=EASTERN)) is True
+    assert rec.visible_at(datetime(2026, 9, 1, 8, 15, tzinfo=EASTERN)) is True
+    assert rec.visible_at(datetime(2026, 9, 1, 8, 16, tzinfo=EASTERN)) is False
 
 
 # --- recommendation logic ----------------------------------------------------
@@ -335,6 +373,25 @@ def test_resolve_trips_resolves_parent_stops(index: StopIndex):
     assert trip.dest_stop == "A24"
     assert trip.boarding == "Fulton St"
     assert trip.target == {"default": "08:30", "tue": "08:15"}
+    assert trip.show_before_minutes is None  # optional; unset by default
+
+
+def test_resolve_trips_parses_show_before_minutes(index: StopIndex):
+    cfg = {
+        "trips": [
+            {
+                "name": "morning-uptown",
+                "boarding": "Fulton St",
+                "line": "A",
+                "direction": "N",
+                "destination": "59 St-Columbus Circle",
+                "target": {"tue": "08:15"},
+                "show_before_minutes": 90,
+            }
+        ]
+    }
+    (trip,) = resolve_trips(cfg, index=index)
+    assert trip.show_before_minutes == 90.0
 
 
 def test_resolve_trips_empty_without_trips_config(index: StopIndex):
@@ -389,6 +446,30 @@ def test_resolve_trips_empty_without_trips_config(index: StopIndex):
                 "arrive_buffer_minutes": -1,
             },
             "arrive_buffer_minutes",
+        ),
+        (
+            {
+                "name": "t",
+                "boarding": "Fulton St",
+                "line": "A",
+                "direction": "N",
+                "destination": "59 St-Columbus Circle",
+                "target": {"tue": "09:00"},
+                "show_before_minutes": 0,
+            },
+            "show_before_minutes",
+        ),
+        (
+            {
+                "name": "t",
+                "boarding": "Fulton St",
+                "line": "A",
+                "direction": "N",
+                "destination": "59 St-Columbus Circle",
+                "target": {"tue": "09:00"},
+                "show_before_minutes": True,
+            },
+            "show_before_minutes",
         ),
     ],
 )

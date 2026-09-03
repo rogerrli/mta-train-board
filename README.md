@@ -216,6 +216,8 @@ line = "A"                       # one line for the whole ride (no transfers)
 direction = "N"                  # matches the boarding station block
 destination = "59 St-Columbus Circle" # by name; must be a stop served by `line`
 arrive_buffer_minutes = 0        # optional; aim to be there this many min early
+show_before_minutes = 90         # optional (#50); show the strip only this many
+                                 # minutes before the target, else hide it
 
 [trips.target]                   # recurring target arrival (Eastern, 24h HH:MM)
 default = "09:00"                # any *weekday* (Mon–Fri) not listed below
@@ -230,7 +232,10 @@ weekday abbreviation (`mon`…`sun`) plus an optional `default`. For "today"
 `default`; a **weekend** with no explicit key has *no target*, so the board
 simply shows no recommendation that day. The block above (generic placeholder
 stations/times) means 8:45 on Tuesdays, 9:00 the rest of the workweek, and
-nothing on weekends. Ride durations come from the vendored travel-time model —
+nothing on weekends. `show_before_minutes` (optional) gates the strip to the last
+N minutes before the target so it isn't up all day — a lighter touch than focus
+mode below, which takes the whole screen during its window. Ride durations come
+from the vendored travel-time model —
 after adding a `line` the model wasn't built with, rebuild it with `uv run
 scripts/refresh-travel-times`.
 

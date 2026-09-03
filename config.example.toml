@@ -251,6 +251,12 @@ borough = "Manhattan"
 #                the vendored data wasn't trimmed to: `uv run scripts/refresh-travel-times`.
 #   arrive_buffer_minutes  Optional. Aim to be there this many minutes EARLY
 #                (the effective target is target - buffer). Default 0.
+#   show_before_minutes  Optional (issue #50). Only show this trip's on-screen
+#                recommendation strip in the last N minutes before the target,
+#                then hide it -- so it doesn't sit on the board wasting space all
+#                day. Omit to keep the strip up all day on a target day. (This is
+#                a lighter touch than focus mode below, which takes the WHOLE
+#                screen during its window; this just gates the strip.)
 #   [trips.target]  Recurring target arrival time (Eastern, 24h "HH:MM"), keyed by
 #                weekday abbreviation (mon/tue/wed/thu/fri/sat/sun) plus an
 #                optional `default`. Resolution for today: an explicit weekday key
@@ -260,14 +266,16 @@ borough = "Manhattan"
 #                weekdays 9:00, and nothing on weekends.
 
 # Example: board the A uptown at Fulton St (configured above) to 59 St-Columbus
-# Circle -- aim to arrive by 8:45 on Tuesdays, 9:00 the rest of the week. These
-# are placeholder stations/times; swap in your own trip in config.local.toml.
+# Circle -- aim to arrive by 8:45 on Tuesdays, 9:00 the rest of the week, and only
+# surface the recommendation strip in the 90 minutes before that. These are
+# placeholder stations/times; swap in your own trip in config.local.toml.
 [[trips]]
 name = "morning-uptown"
 boarding = "Fulton St"
 line = "A"
 direction = "N"
 destination = "59 St-Columbus Circle"
+show_before_minutes = 90
 
 [trips.target]
 default = "09:00"

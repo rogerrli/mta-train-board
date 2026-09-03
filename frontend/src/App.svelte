@@ -54,11 +54,12 @@
     selectedStation ? (stations.find((st) => st.name === selectedStation) ?? null) : null,
   );
 
-  // Arrive-by recommendations (issue #27). A trip with no target today (e.g. a
-  // weekend) reports status "no_target" -- drop those so the strip only shows
-  // trips that are actually in play right now.
+  // Arrive-by recommendations (issue #27). The server marks each trip `visible`
+  // (issue #50): false on a no-target day (e.g. a weekend) and outside the trip's
+  // configured lead-in window, so the strip only takes board space when a train
+  // is actually in play -- then the station grid reclaims the rest.
   const trips = $derived(
-    ($board.payload?.trips ?? []).filter((t) => t.status !== "no_target"),
+    ($board.payload?.trips ?? []).filter((t) => t.visible),
   );
 
   // Scheduled focus mode (issue #39). When a focus rule is active the server sets
@@ -105,7 +106,7 @@
           <p class="hint">Add <code>[[stations]]</code> blocks to your config.</p>
         </div>
       {:else}
-        <div class="stations">
+        <div class="stations" style="--cols: {Math.min(stations.length, 2)}">
           {#each stations as station (station.name)}
             <Station
               {station}
@@ -155,15 +156,18 @@
     gap: var(--gap);
   }
 
-  /* Content-proportional cards: a flex row that wraps, where each station grows
-     by its own weight (set on .station in Station.svelte from its group/arrival
-     counts). Denser stations claim more width; the shared flex-basis + wrap keep
-     it responsive as the station count changes. */
+  /* Uniform grid of equal cells (issue #50, reverting the #40 proportional
+     flex-wrap that made uneven cards and clipped countdowns). `--cols` is the
+     station count capped at 2, so the typical ~4 stations sit in a compact 2x2.
+     `align-content: start` packs the rows to the top and sizes them to their
+     content -- cards stay only as tall as they need instead of stretching to
+     fill, so the countdowns get their horizontal room back. */
   .stations {
     flex: 1;
     min-height: 0;
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(var(--cols), 1fr);
+    align-content: start;
     gap: var(--gap);
   }
 

@@ -11,20 +11,9 @@
   // `alerts` are the board's service alerts (#13), passed to each group so it can
   // badge itself when one names its line (LineGroup filters by line).
   let { station, now, onselect, onstationselect, alerts = [] } = $props();
-
-  // Weight for content-proportional sizing (issue #40): each group contributes
-  // its row plus its trains, so a station we watch more heavily claims more of
-  // the board. Off the raw payload counts (not the per-second `liveArrivals`),
-  // so the weight only shifts on a poll, not every tick — no countdown jitter.
-  const weight = $derived(
-    Math.max(
-      1,
-      station.arrivals.reduce((n, g) => n + 1 + g.arrivals.length, 0),
-    ),
-  );
 </script>
 
-<section class="station" style="flex-grow: {weight}">
+<section class="station">
   <h2 class="name">
     <button type="button" class="name-btn tap-reset" onclick={() => onstationselect(station.name)}>
       {station.name}
@@ -47,13 +36,10 @@
 
 <style>
   .station {
-    /* flex-grow is set inline from the station's content weight (issue #40); a
-       shared basis + a floor width let dense stations widen without starving
-       sparse ones, and wrap instead of shrinking to slivers on a narrow board. */
-    flex-grow: 1;
-    flex-shrink: 1;
-    flex-basis: 20rem;
-    min-width: min(100%, 18rem);
+    /* A plain grid cell (issue #50): its width comes from the 2-column track in
+       App.svelte, its height from its own content. min-width:0 lets the cell
+       shrink to its track instead of being forced wide by a long line row. */
+    min-width: 0;
     background: var(--panel);
     border: 1px solid var(--panel-edge);
     border-radius: clamp(0.4rem, 1vw, 0.9rem);
@@ -86,7 +72,7 @@
   .groups {
     display: flex;
     flex-direction: column;
-    gap: clamp(0.25rem, 1vh, 0.7rem);
+    gap: clamp(0.2rem, 0.7vh, 0.5rem);
     min-height: 0;
     overflow: hidden;
   }
