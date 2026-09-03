@@ -5,6 +5,7 @@
     bulletTextColor,
     formatDuration,
   } from "../lib/format.js";
+  import SplitFlap from "./SplitFlap.svelte";
 
   // One arrive-by recommendation (issue #27): the ideal train to catch for a
   // target arrival time, plus a safer earlier fallback. "Leave in N min" ticks
@@ -75,7 +76,7 @@
       {#if leaveIn === 0}
         <span class="big">leave now</span>
       {:else}
-        <span class="big tnum">{formatDuration(leaveIn)}</span>
+        <span class="big tnum"><SplitFlap value={formatDuration(leaveIn)} /></span>
         <span class="lunit">{leaveIn < 60 ? "min to leave" : "to leave"}</span>
       {/if}
     </div>
@@ -84,6 +85,8 @@
 
 <style>
   .rec {
+    /* The card sits on --panel; match it so the flip tiles occlude cleanly. */
+    --flap-bg: var(--panel);
     display: flex;
     align-items: center;
     gap: clamp(0.5rem, 1.4vw, 1.1rem);
