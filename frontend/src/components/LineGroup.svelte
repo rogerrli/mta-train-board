@@ -5,6 +5,7 @@
     countdownLabel,
     GLANCE_LIMIT,
   } from "../lib/format.js";
+  import SplitFlap from "./SplitFlap.svelte";
 
   // One line + direction: the route bullet, the direction, and the next few
   // countdowns. Minutes and catchability are recomputed every second off the
@@ -46,7 +47,7 @@
           class="min tnum {a.catchability?.toLowerCase() ?? 'calm'}"
           class:lead={i === 0}
         >
-          {countdownLabel(a.minutes)}
+          <SplitFlap value={countdownLabel(a.minutes)} />
         </span>
       {/each}
     {/if}
@@ -122,7 +123,10 @@
 
   .times {
     display: flex;
-    align-items: baseline;
+    /* Sit the countdowns on a common bottom line. The flip digits (#53) are
+       inline-blocks whose baseline is their bottom edge, so bottom-align keeps
+       the lead number and the rest aligned regardless of that baseline. */
+    align-items: flex-end;
     gap: clamp(0.5rem, 1.6vw, 1.2rem);
     min-width: 0;
     overflow: hidden;
@@ -147,12 +151,24 @@
   }
 
   /* MISSED: not feasible at walking pace. De-emphasize (owner's #7 call), keep
-     it visible so the pattern of service still reads. */
+     it visible so the pattern of service still reads. The strike is drawn as an
+     overlay line rather than text-decoration: the flip digits (#53) are absolutely
+     positioned, so a plain line-through wouldn't paint through them. */
   .min.missed {
+    position: relative;
     color: var(--text-faint);
-    text-decoration: line-through;
-    text-decoration-thickness: 0.06em;
     font-weight: 600;
+  }
+  .min.missed::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 0.06em;
+    background: currentColor;
+    transform: translateY(-50%);
+    z-index: 1;
   }
 
   .none {

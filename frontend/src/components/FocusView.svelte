@@ -5,6 +5,7 @@
     bulletTextColor,
     formatDuration,
   } from "../lib/format.js";
+  import SplitFlap from "./SplitFlap.svelte";
 
   // Scheduled focus mode (issue #39): during a configured window the board drops
   // everything else and dedicates the whole screen to one trip's arrive-by
@@ -84,7 +85,7 @@
       {#if leaveIn === 0}
         <span class="big">leave now</span>
       {:else}
-        <span class="big tnum">{formatDuration(leaveIn)}</span>
+        <span class="big tnum"><SplitFlap value={formatDuration(leaveIn)} /></span>
         <span class="lunit">{leaveIn < 60 ? "min to leave" : "to leave"}</span>
       {/if}
     </div>
@@ -96,6 +97,8 @@
      calm green edge when on time; the can't-make-it states go urgent red. Every
      status sets the edge, so green is the base and only the urgent ones override. */
   .focus {
+    /* The card sits on --panel; match it so the flip tiles occlude cleanly. */
+    --flap-bg: var(--panel);
     flex: 1;
     min-height: 0;
     display: flex;
