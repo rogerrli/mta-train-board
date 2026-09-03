@@ -15,8 +15,8 @@ Scope note: this only shapes and serves the computed arrivals. A background
 :class:`~app.poller.Poller` (issue #6) refreshes the board on an interval and
 ``/api/state`` answers from that cache -- ``updated_at`` is the last successful
 poll and the payload carries ``stale``/``age_seconds`` so the UI can show "data
-is old". Service alerts are issue #13 (the ``alerts`` slot is an empty
-placeholder here), and richer stale/offline error states are issue #14.
+is old". The ``alerts`` slot carries service alerts (issue #13) matched to the
+watched lines; richer stale/offline error states are issue #14.
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.alerts import Alert
 from app.arrivals import Arrival, ArrivalGroup, route_color
 from app.feeds import EASTERN
 from app.focus import active_focus
@@ -130,12 +131,33 @@ def _serialize_recommendation(rec: TripRecommendation) -> dict[str, Any]:
     }
 
 
+def _serialize_alert(a: Alert) -> dict[str, Any]:
+    """One matched service alert (#13) as JSON.
+
+    ``active`` distinguishes a disruption in effect now from an upcoming/planned
+    heads-up so the board can weight the badge; ``start``/``end`` bound the
+    relevant active period (absolute ISO times, so the UI can render "starts
+    5:00 PM"). ``header`` drives the badge/summary, ``description`` the tap detail.
+    """
+    return {
+        "id": a.id,
+        "lines": list(a.lines),
+        "header": a.header,
+        "description": a.description,
+        "alert_type": a.alert_type,
+        "active": a.active,
+        "start": a.start.isoformat() if a.start else None,
+        "end": a.end.isoformat() if a.end else None,
+    }
+
+
 def build_state(
     groups: list[ArrivalGroup],
     updated_at: datetime,
     *,
     recommendations: list[TripRecommendation] | None = None,
     focus_trip: str | None = None,
+    alerts: list[Alert] | None = None,
     stale: bool = False,
     age_seconds: int = 0,
     refresh_interval_seconds: float = 30.0,
@@ -148,8 +170,9 @@ def build_state(
     ``refresh_interval_seconds`` tells the board how often to re-poll this endpoint.
     ``focus_trip`` is the name of the trip a scheduled-focus rule (#39) has active
     right now, or ``None``; when set, the payload's ``focus`` directive tells the
-    board to dedicate the screen to that trip. ``alerts`` is an empty placeholder
-    until service alerts land in issue #13. Pure and offline -- unit-testable.
+    board to dedicate the screen to that trip. ``alerts`` are the service alerts
+    (#13) matched to the watched lines; the board badges affected line groups and
+    shows the text on tap. Pure and offline -- unit-testable.
     """
     # Insertion-ordered dict groups by station while preserving config order.
     stations: dict[str, dict[str, Any]] = {}
@@ -185,7 +208,9 @@ def build_state(
         # to (its recommendation, terminal label and all, is in trips[] above),
         # or null when no rule is active.
         "focus": {"trip": focus_trip} if focus_trip is not None else None,
-        "alerts": [],  # TODO(#13): service alerts for the watched lines.
+        # Service alerts (#13) matched to the watched lines, current-first; empty
+        # when none apply or the alerts feed was unreachable this poll.
+        "alerts": [_serialize_alert(a) for a in (alerts or [])],
     }
 
 
@@ -221,6 +246,7 @@ def state() -> dict[str, Any]:
         snapshot.updated_at,
         recommendations=snapshot.recommendations,
         focus_trip=active.trip if active else None,
+        alerts=snapshot.alerts,
         stale=poller.is_stale(snapshot, now=now),
         age_seconds=int(poller.age_seconds(snapshot, now=now)),
         refresh_interval_seconds=poller.refresh_seconds,

@@ -122,6 +122,22 @@ export function stationWalkMinutes(station) {
   return values.size === 1 ? [...values][0] : null;
 }
 
+// One-line timing for a service alert (issue #13). A live disruption reads "In
+// effect" (with an end time when the feed bounds it); an upcoming/planned change
+// reads its window, "Starts 5:00 PM" or "5:00 PM – 9:00 PM". Times are pinned to
+// New York via clockTime. Returns "" for an open-ended, unbounded alert (nothing
+// useful to say about its timing).
+export function alertTiming(alert) {
+  const { active, start, end } = alert;
+  if (active) {
+    return end ? `In effect until ${clockTime(end)}` : "In effect now";
+  }
+  if (start) {
+    return end ? `${clockTime(start)} – ${clockTime(end)}` : `Starts ${clockTime(start)}`;
+  }
+  return "";
+}
+
 // "just now" / "12s ago" / "3m ago" for the freshness indicator.
 export function agoLabel(seconds) {
   if (seconds < 5) return "just now";

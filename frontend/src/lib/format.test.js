@@ -14,6 +14,7 @@ import {
   bulletTextColor,
   catchabilityLabel,
   clockTime,
+  alertTiming,
   leaveInMinutes,
   stationWalkMinutes,
   DEFAULT_WALK_DELTA,
@@ -155,4 +156,27 @@ test("stationWalkMinutes returns the shared value, else null (issue #10)", () =>
   );
   // A single group with a walk time still resolves.
   assert.equal(stationWalkMinutes({ arrivals: [{ walk_minutes: 4 }] }), 4);
+});
+
+test("alertTiming reads live vs. planned windows (issue #13)", () => {
+  // A 5:00 PM ET boundary, expressed as a UTC ISO the parser pins back to NY.
+  const fivePmEt = "2026-09-03T21:00:00Z"; // 5:00 PM EDT
+  const ninePmEt = "2026-09-03T01:00:00Z"; // 9:00 PM EDT the prior day (arbitrary end)
+
+  // Active, bounded -> "In effect until <end>".
+  assert.match(
+    alertTiming({ active: true, start: fivePmEt, end: ninePmEt }),
+    /^In effect until /,
+  );
+  // Active, open-ended -> a plain "in effect now" with no time.
+  assert.equal(alertTiming({ active: true, start: null, end: null }), "In effect now");
+  // Upcoming, only a start -> "Starts <time>".
+  assert.match(alertTiming({ active: false, start: fivePmEt, end: null }), /^Starts /);
+  // Upcoming, a full window -> "<start> – <end>".
+  assert.match(
+    alertTiming({ active: false, start: fivePmEt, end: ninePmEt }),
+    / – /,
+  );
+  // Nothing to say (upcoming with no start).
+  assert.equal(alertTiming({ active: false, start: null, end: null }), "");
 });

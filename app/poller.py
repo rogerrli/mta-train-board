@@ -29,9 +29,10 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from app.alerts import Alert, fetch_alerts
 from app.arrivals import ArrivalGroup
 from app.config import load_config
-from app.feeds import EASTERN
+from app.feeds import EASTERN, FeedError
 from app.focus import FocusConfigError, FocusRule, resolve_focus_rules
 from app.trips import TripRecommendation, fetch_board
 
@@ -59,13 +60,17 @@ class Snapshot:
     poll; empty when no ``[[trips]]`` are configured. ``focus_rules`` are the
     resolved scheduled-focus rules (#39); the API decides which (if any) is active
     at request time, so they ride along with the snapshot rather than being frozen
-    at poll time. Empty when no ``[[focus]]`` blocks are configured.
+    at poll time. Empty when no ``[[focus]]`` blocks are configured. ``alerts`` are
+    the service alerts (#13) matched to the watched lines this poll; empty when
+    none apply or the alerts feed was unreachable (it's a secondary enhancement --
+    a failed alerts fetch never blanks the board).
     """
 
     groups: list[ArrivalGroup]
     updated_at: datetime
     recommendations: list[TripRecommendation] = field(default_factory=list)
     focus_rules: list[FocusRule] = field(default_factory=list)
+    alerts: list[Alert] = field(default_factory=list)
 
 
 class Poller:
@@ -142,11 +147,25 @@ class Poller:
         except FocusConfigError as exc:
             logger.warning("Ignoring invalid [[focus]] config; focus disabled: %s", exc)
             focus_rules = []
+        # Fetch service alerts for the watched lines (#13). The board's groups
+        # already name every watched line, so derive the set from them rather than
+        # re-parsing config. Alerts are a secondary enhancement: a feed failure
+        # must not blank the board, so drop them and serve arrivals on any error
+        # (the outer loop still succeeds and the cache stays fresh).
+        watched_lines = {g.line for g in groups}
+        try:
+            alerts = fetch_alerts(watched_lines, now=now)
+        except FeedError as exc:
+            logger.warning(
+                "Alerts feed unavailable; serving board without them: %s", exc
+            )
+            alerts = []
         return Snapshot(
             groups=groups,
             updated_at=now,
             recommendations=recommendations,
             focus_rules=focus_rules,
+            alerts=alerts,
         )
 
     async def _run(self) -> None:

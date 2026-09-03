@@ -14,8 +14,10 @@
   // The whole row is a button: tapping it opens the detail breakdown (issue #9)
   // via `onselect`. The cached payload carries a deeper list than the glance
   // shows, so the glance renders only the first GLANCE_LIMIT here and the detail
-  // overlay shows the full group.
-  let { group, now, onselect } = $props();
+  // overlay shows the full group. `alerts` are the service alerts (#13) for this
+  // group's line -- the row badges itself when there are any; the text shows in
+  // the tap detail (a badge, not the alert text, to keep the glance uncluttered).
+  let { group, now, onselect, alerts = [] } = $props();
 
   const arrivals = $derived(liveArrivals(group, now));
   const glance = $derived(arrivals.slice(0, GLANCE_LIMIT));
@@ -23,15 +25,31 @@
   // Terminal-station label (#41): show the configured destination + borough,
   // falling back to the compass word ("Northbound") when unconfigured.
   const primary = $derived(group.terminal ?? group.direction_label);
+
+  // Line-level match (#13): an alert on this line badges the row. A live
+  // disruption (`active`) fills the badge amber; an upcoming/planned-only change
+  // dims it, so a real delay reads louder than a heads-up at a glance.
+  const lineAlerts = $derived(alerts.filter((a) => a.lines.includes(group.line)));
+  const hasActiveAlert = $derived(lineAlerts.some((a) => a.active));
 </script>
 
 <button type="button" class="group tap-reset" onclick={onselect}>
-  <span
-    class="bullet"
-    style="background:{group.color}; color:{textColor}"
-    title={primary}
-  >
-    {group.line}
+  <span class="bullet-wrap">
+    <span
+      class="bullet"
+      style="background:{group.color}; color:{textColor}"
+      title={primary}
+    >
+      {group.line}
+    </span>
+    {#if lineAlerts.length > 0}
+      <span
+        class="alert-badge"
+        class:active={hasActiveAlert}
+        title="Service alert"
+        aria-label="Service alert">!</span
+      >
+    {/if}
   </span>
   <span class="dir" class:named={group.terminal}>
     <span class="terminal">{primary}</span>
@@ -67,6 +85,13 @@
     border-radius: clamp(0.3rem, 0.8vw, 0.6rem);
   }
 
+  /* Anchors the alert badge (#13) to the bullet's top-right corner. */
+  .bullet-wrap {
+    flex: none;
+    position: relative;
+    display: inline-flex;
+  }
+
   .bullet {
     flex: none;
     display: inline-flex;
@@ -78,6 +103,30 @@
     font-weight: 800;
     font-size: clamp(0.95rem, 2.7vh, 1.7rem);
     line-height: 1;
+  }
+
+  /* Service-alert badge (#13): a small corner marker on the line bullet. Amber
+     and filled for a live disruption; dim for an upcoming/planned-only change. */
+  .alert-badge {
+    position: absolute;
+    top: -0.2em;
+    right: -0.2em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: clamp(0.9rem, 2.2vh, 1.4rem);
+    height: clamp(0.9rem, 2.2vh, 1.4rem);
+    padding: 0 0.15em;
+    border-radius: 999px;
+    border: 1.5px solid var(--panel);
+    background: var(--text-faint);
+    color: #000;
+    font-size: clamp(0.6rem, 1.6vh, 1rem);
+    font-weight: 900;
+    line-height: 1;
+  }
+  .alert-badge.active {
+    background: var(--alert);
   }
 
   .dir {

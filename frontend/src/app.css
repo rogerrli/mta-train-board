@@ -15,6 +15,11 @@
   --hurry: #ff4d4d; /* urgent: move now */
   --calm: #f5f7fa; /* CATCHABLE / unclassified: plenty of time */
 
+  /* Service-alert accent (issue #13). Amber reads as "heads-up" without
+     colliding with the red HURRY urgency; a live disruption fills the badge,
+     an upcoming/planned one is dimmed. */
+  --alert: #f5a623;
+
   --gap: clamp(0.4rem, 1.2vw, 1rem);
   font-family:
     system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
