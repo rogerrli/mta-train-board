@@ -118,8 +118,9 @@ def _serialize_recommendation(rec: TripRecommendation) -> dict[str, Any]:
         "direction": rec.direction,
         "destination": rec.destination,
         # The boarding group's #41 terminal-station label for this (line, direction)
-        # (e.g. "Inwood-207 St" / "Man"); null when unlabeled. Focus mode (#39) shows
-        # it as the direction heading, falling back to destination when null.
+        # (e.g. "Inwood-207 St" / "Manhattan"); null when unlabeled. Focus mode
+        # (#39) shows it as the direction heading, falling back to destination
+        # when null.
         "terminal": rec.terminal,
         "borough": rec.borough,
         "target": rec.target.isoformat() if rec.target else None,

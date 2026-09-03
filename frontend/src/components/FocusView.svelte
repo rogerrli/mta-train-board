@@ -5,7 +5,7 @@
   // everything else and dedicates the whole screen to one trip's arrive-by
   // recommendation (#27). `trip` is that trip's recommendation from /api/state's
   // trips[]; it carries the #41 terminal-station label (terminal/borough) so the
-  // header reads "1 → Van Cortlandt Park" / "Bx" rather than a compass word.
+  // header reads "1 → Van Cortlandt Park" / "Bronx" rather than a compass word.
   // The layout is a full-screen sibling of Recommendation.svelte (the glance-strip
   // card) -- they share the status/leave logic below, so keep them in sync.
   // "Leave in N min" ticks down every second off the shared `now` clock.

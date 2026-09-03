@@ -99,7 +99,7 @@ curl http://127.0.0.1:8000/api/state
           "direction": "N",
           "direction_label": "Northbound",
           "terminal": "96 St-2 Av",
-          "borough": "Man",
+          "borough": "Manhattan",
           "color": "#FCCC0A",
           "walk_minutes": 6,
           "arrivals": [
@@ -173,7 +173,8 @@ terminals ("the uptown A to Inwood"), not compass words:
 line = "A"                       # subway line
 direction = "N"                  # "N" or "S" — the platform this applies to
 terminal = "Inwood-207 St"       # primary text shown in place of the compass word
-borough = "Man"                  # smaller secondary text (Man / Bklyn / Bx / Qns / SI)
+borough = "Manhattan"           # smaller secondary text; full borough name
+                                 # (Manhattan / Brooklyn / Bronx / Queens / Staten Island)
 ```
 
 The board shows `terminal` as the primary direction text and `borough` as
@@ -239,7 +240,7 @@ A focus rule only points at a `[[trips]]` block by `name` — the **target arriv
 time is owned by that trip**, never redefined here. The board re-checks the active
 rule on every refresh, so focus flips in/out right around the window boundary; the
 focus header reuses the trip's `[[direction_labels]]` terminal + borough (e.g. "A
-→ Inwood-207 St", "Man"). If two rules ever overlap, the **first listed wins**. A
+→ Inwood-207 St", "Manhattan"). If two rules ever overlap, the **first listed wins**. A
 window crossing midnight isn't supported — split it into two rules.
 
 To customize, copy it to a local override (gitignored so your settings stay
