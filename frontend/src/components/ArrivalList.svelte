@@ -22,7 +22,7 @@
       <li class="row {a.catchability?.toLowerCase() ?? 'calm'}">
         <span class="count tnum">
           <span class="mins">{countdownLabel(a.minutes)}</span>
-          {#if a.minutes >= 1}<span class="unit">min</span>{/if}
+          {#if a.minutes >= 1 && a.minutes < 60}<span class="unit">min</span>{/if}
         </span>
         <span class="mid">
           <span class="dest">{a.headsign ?? fallbackDest}</span>

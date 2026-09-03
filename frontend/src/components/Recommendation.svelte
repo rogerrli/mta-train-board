@@ -1,5 +1,10 @@
 <script>
-  import { clockTime, leaveInMinutes, bulletTextColor } from "../lib/format.js";
+  import {
+    clockTime,
+    leaveInMinutes,
+    bulletTextColor,
+    formatDuration,
+  } from "../lib/format.js";
 
   // One arrive-by recommendation (issue #27): the ideal train to catch for a
   // target arrival time, plus a safer earlier fallback. "Leave in N min" ticks
@@ -34,7 +39,11 @@
         {#if trip.status === "on_time"}
           <span class="ok">· on time</span>
         {:else}
-          <span class="warn">· {rec.lateness_minutes} min late</span>
+          <span class="warn"
+            >· {formatDuration(rec.lateness_minutes)}{rec.lateness_minutes < 60
+              ? " min"
+              : ""} late</span
+          >
         {/if}
         <span class="target">for {target}</span>
       </div>
@@ -66,8 +75,8 @@
       {#if leaveIn === 0}
         <span class="big">leave now</span>
       {:else}
-        <span class="big tnum">{leaveIn}</span>
-        <span class="lunit">min to leave</span>
+        <span class="big tnum">{formatDuration(leaveIn)}</span>
+        <span class="lunit">{leaveIn < 60 ? "min to leave" : "to leave"}</span>
       {/if}
     </div>
   {/if}
