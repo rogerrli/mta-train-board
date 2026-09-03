@@ -176,6 +176,12 @@ def parse_alerts(
         if alert_type in EXCLUDED_ALERT_TYPES:
             continue
 
+        # Match by line only. informed_entity also carries a direction_id (0/1),
+        # but it's unusable for scoping to a platform: ~half of alerts omit it,
+        # a single alert mixes 0 and 1 across its entities (a clearly one-way
+        # "Manhattan-bound [F]" alert lists both), stop_ids are parent IDs with no
+        # N/S suffix, and 0/1->N/S isn't an official mapping. Filtering on it would
+        # badge the wrong platform, so we badge the whole line (owner's call, #13).
         routes = {
             str(ie["route_id"])
             for ie in alert.get("informed_entity", [])

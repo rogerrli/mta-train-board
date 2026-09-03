@@ -159,24 +159,32 @@ test("stationWalkMinutes returns the shared value, else null (issue #10)", () =>
 });
 
 test("alertTiming reads live vs. planned windows (issue #13)", () => {
-  // A 5:00 PM ET boundary, expressed as a UTC ISO the parser pins back to NY.
-  const fivePmEt = "2026-09-03T21:00:00Z"; // 5:00 PM EDT
-  const ninePmEt = "2026-09-03T01:00:00Z"; // 9:00 PM EDT the prior day (arbitrary end)
+  // Boundaries as UTC ISO the parser pins back to NY. NOW is a 2026-09-03
+  // afternoon; the same-day bounds land on 2026-09-03 in NY.
+  const now = Date.parse("2026-09-03T18:00:00Z"); // 2:00 PM EDT, Thu 9/3
+  const fivePm = "2026-09-03T21:00:00Z"; // 5:00 PM EDT, same NY day
+  const ninePm = "2026-09-04T01:00:00Z"; // 9:00 PM EDT, still 9/3 in NY
+  const fiveAmNext = "2026-09-04T09:00:00Z"; // 5:00 AM EDT, 9/4 in NY (overnight)
 
   // Active, bounded -> "In effect until <end>".
   assert.match(
-    alertTiming({ active: true, start: fivePmEt, end: ninePmEt }),
+    alertTiming({ active: true, start: fivePm, end: ninePm }, now),
     /^In effect until /,
   );
   // Active, open-ended -> a plain "in effect now" with no time.
-  assert.equal(alertTiming({ active: true, start: null, end: null }), "In effect now");
-  // Upcoming, only a start -> "Starts <time>".
-  assert.match(alertTiming({ active: false, start: fivePmEt, end: null }), /^Starts /);
-  // Upcoming, a full window -> "<start> – <end>".
-  assert.match(
-    alertTiming({ active: false, start: fivePmEt, end: ninePmEt }),
-    / – /,
+  assert.equal(
+    alertTiming({ active: true, start: null, end: null }, now),
+    "In effect now",
   );
+  // Upcoming, only a start -> "Starts <time>".
+  assert.match(alertTiming({ active: false, start: fivePm, end: null }, now), /^Starts /);
+  // Upcoming, a same-day window -> "<start> – <end>", no weekday tags.
+  const sameDay = alertTiming({ active: false, start: fivePm, end: ninePm }, now);
+  assert.match(sameDay, / – /);
+  assert.doesNotMatch(sameDay, /Thu|Fri/);
+  // Overnight window -> the next-day end carries its weekday so it's unambiguous.
+  const overnight = alertTiming({ active: false, start: ninePm, end: fiveAmNext }, now);
+  assert.match(overnight, /5:00 AM Fri$/);
   // Nothing to say (upcoming with no start).
-  assert.equal(alertTiming({ active: false, start: null, end: null }), "");
+  assert.equal(alertTiming({ active: false, start: null, end: null }, now), "");
 });

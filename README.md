@@ -28,6 +28,11 @@ Station/stop identifiers come from the MTA's **GTFS static** `stops.txt`. The
 app maps human station names to GTFS stop IDs so arrivals can be filtered to the
 stops and directions I actually use.
 
+Service alerts (delays and planned changes) come from the MTA's separate
+GTFS-Realtime **alerts** feed, published as JSON (Camsys/Mercury extensions, no
+key). The app matches alerts to the watched lines and surfaces them on the board
+(issue #13).
+
 > Exact feed URLs and hosting have changed over time — confirming the current
 > endpoints is an early task (see issues).
 
@@ -112,7 +117,13 @@ curl http://127.0.0.1:8000/api/state
       ]
     }
   ],
-  "alerts": []
+  "alerts": [
+    {
+      "id": "lmm:alert:...", "lines": ["Q"], "alert_type": "Delays",
+      "active": true, "header": "...", "description": "...",
+      "start": "...", "end": null
+    }
+  ]
 }
 ```
 
@@ -125,8 +136,12 @@ text, falling back to `direction_label` ("Northbound"/"Southbound") when unset.
 `catchability` (`CATCHABLE`/`HURRY`/`MISSED`, or `null` when the station has no
 `walk_minutes`) and the group's `walk_minutes` let the board style urgency and
 recompute the countdowns + catchability every second from `arrival` between polls
-(issue #8). `alerts` is an empty placeholder until service alerts land (issue
-#13). A background task polls the feeds every `refresh_interval_seconds` and
+(issue #8). `alerts` carries service alerts (issue #13) matched to the watched
+lines, current-first: each has the affected `lines`, an `active` flag (a
+disruption in effect now vs. an upcoming/planned change starting later today),
+`alert_type`, `header`/`description` text, and the relevant `start`/`end`
+window; the board badges affected line groups and shows the text on tap. A
+background task polls the feeds every `refresh_interval_seconds` and
 caches the board; the endpoint serves that cache (never a live per-request fetch).
 On a feed outage the last-known board keeps being served, flagged `stale` once
 older than `stale_after_seconds`; before the first successful poll the endpoint
