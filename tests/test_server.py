@@ -145,7 +145,7 @@ def test_build_state_serializes_trip_recommendation():
         ),
         fallback=None,
     )
-    payload = server.build_state([], NOW, recommendations=[rec])
+    payload = server.build_state([], NOW, recommendations=[rec], now=NOW)
     (trip,) = payload["trips"]
     assert trip["name"] == "morning-uptown"
     assert trip["status"] == "on_time"
@@ -225,7 +225,7 @@ def _rec(name="morning-uptown", line="A", direction="N", terminal=None, borough=
 
 def test_build_state_focus_null_by_default():
     # No active focus rule -> focus directive is null (normal glance board #39).
-    payload = server.build_state([], NOW, recommendations=[_rec()])
+    payload = server.build_state([], NOW, recommendations=[_rec()], now=NOW)
     assert payload["focus"] is None
 
 
@@ -233,7 +233,7 @@ def test_build_state_focus_names_the_active_trip():
     # An active focus trip -> the directive just names which trip the board is
     # dedicated to; its recommendation (terminal label and all) rides in trips[].
     payload = server.build_state(
-        [], NOW, recommendations=[_rec()], focus_trip="morning-uptown"
+        [], NOW, recommendations=[_rec()], focus_trip="morning-uptown", now=NOW
     )
     assert payload["focus"] == {"trip": "morning-uptown"}
 
@@ -245,7 +245,7 @@ def test_build_state_focus_stays_on_a_no_target_trip():
     # recommendation is no_target (the board renders FocusView's no_target branch).
     no_target = replace(_rec(), status="no_target", target=None)
     payload = server.build_state(
-        [], NOW, recommendations=[no_target], focus_trip="morning-uptown"
+        [], NOW, recommendations=[no_target], focus_trip="morning-uptown", now=NOW
     )
     assert payload["focus"] == {"trip": "morning-uptown"}
     assert payload["trips"][0]["status"] == "no_target"
@@ -255,11 +255,11 @@ def test_build_state_serializes_recommendation_terminal_label():
     # The #41 terminal-station label rides on the recommendation (resolved from its
     # boarding group in app.trips), so focus mode reads it without re-joining groups.
     rec = _rec(terminal="Inwood-207 St", borough="Manhattan")
-    (trip,) = server.build_state([], NOW, recommendations=[rec])["trips"]
+    (trip,) = server.build_state([], NOW, recommendations=[rec], now=NOW)["trips"]
     assert (trip["terminal"], trip["borough"]) == ("Inwood-207 St", "Manhattan")
 
     # Unlabeled (line, direction) -> null, and the board falls back to destination.
-    (bare,) = server.build_state([], NOW, recommendations=[_rec()])["trips"]
+    (bare,) = server.build_state([], NOW, recommendations=[_rec()], now=NOW)["trips"]
     assert (bare["terminal"], bare["borough"]) == (None, None)
 
 
@@ -292,6 +292,30 @@ def test_build_state_serializes_alerts():
             "end": None,
         }
     ]
+
+
+def test_build_state_recommendation_visible_without_window():
+    # No lead-in window (#50) -> the strip is visible on a target day (original
+    # behavior), whatever the clock. `_rec()` sets no show_before_minutes.
+    (trip,) = server.build_state([], NOW, recommendations=[_rec()], now=NOW)["trips"]
+    assert trip["visible"] is True
+
+
+def test_build_state_marks_recommendation_hidden_outside_its_window():
+    # With a lead-in window (#50), `visible` is decided against the passed `now`:
+    # true inside [target - show_before, target], false before it.
+    target = NOW.replace(hour=9, minute=0)
+    rec = replace(
+        _rec(), target=target, show_before_minutes=60
+    )  # window [08:00, 09:00]
+    inside = server.build_state(
+        [], NOW, recommendations=[rec], now=target.replace(hour=8, minute=30)
+    )
+    outside = server.build_state(
+        [], NOW, recommendations=[rec], now=target.replace(hour=7, minute=0)
+    )
+    assert inside["trips"][0]["visible"] is True
+    assert outside["trips"][0]["visible"] is False
 
 
 # --- endpoints ---------------------------------------------------------------

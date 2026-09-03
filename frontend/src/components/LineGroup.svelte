@@ -82,7 +82,7 @@
     gap: clamp(0.4rem, 1vw, 0.8rem);
     min-width: 0;
     width: 100%;
-    padding: clamp(0.15rem, 0.6vh, 0.4rem) clamp(0.2rem, 0.6vw, 0.5rem);
+    padding: clamp(0.1rem, 0.4vh, 0.3rem) clamp(0.2rem, 0.6vw, 0.5rem);
     border-radius: clamp(0.3rem, 0.8vw, 0.6rem);
   }
 
@@ -98,11 +98,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: clamp(1.6rem, 4.6vh, 3rem);
-    height: clamp(1.6rem, 4.6vh, 3rem);
+    width: clamp(1.4rem, 3.6vh, 2.5rem);
+    height: clamp(1.4rem, 3.6vh, 2.5rem);
     border-radius: 50%;
     font-weight: 800;
-    font-size: clamp(0.95rem, 2.7vh, 1.7rem);
+    font-size: clamp(0.85rem, 2.2vh, 1.4rem);
     line-height: 1;
   }
 
@@ -131,8 +131,11 @@
   }
 
   .dir {
-    flex: none;
-    width: clamp(4.5rem, 12vw, 8rem);
+    /* The countdowns are what matters (issue #50): give them priority and let
+       this label yield first. It has a preferred width but may shrink (its
+       terminal text clamps to two lines, borough ellipsizes) so the times keep
+       their room and never clip at the card edge. */
+    flex: 0 1 clamp(4.5rem, 12vw, 8rem);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -171,18 +174,19 @@
   }
 
   .times {
+    /* Never shrink the countdowns (issue #50): they hold their natural width so
+       all GLANCE_LIMIT of them stay fully visible; the .dir label yields instead. */
+    flex: none;
     display: flex;
     /* Sit the countdowns on a common bottom line. The flip digits (#53) are
        inline-blocks whose baseline is their bottom edge, so bottom-align keeps
        the lead number and the rest aligned regardless of that baseline. */
     align-items: flex-end;
     gap: clamp(0.5rem, 1.6vw, 1.2rem);
-    min-width: 0;
-    overflow: hidden;
   }
 
   .min {
-    font-size: clamp(1.4rem, 4.6vh, 3.1rem);
+    font-size: clamp(1.2rem, 3.4vh, 2.4rem);
     font-weight: 800;
     line-height: 1;
     color: var(--calm);
@@ -190,7 +194,7 @@
 
   /* The soonest train is the one you act on: make it the biggest thing here. */
   .min.lead {
-    font-size: clamp(1.9rem, 6.4vh, 4.4rem);
+    font-size: clamp(1.6rem, 4.6vh, 3.2rem);
   }
 
   /* HURRY: only makeable if you move now. Loud + pulsing. */

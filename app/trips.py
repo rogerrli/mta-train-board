@@ -108,6 +108,10 @@ class ResolvedTrip:
     dest_stop: str
     target: dict[str, str]
     arrive_buffer_minutes: float = 0.0
+    # Optional lead-in window (#50): show this trip's recommendation strip only in
+    # the last ``show_before_minutes`` before the target, then hide it. ``None``
+    # keeps the original behavior -- the strip shows all day on a target day.
+    show_before_minutes: float | None = None
 
     def effective_target(self, now: datetime) -> datetime | None:
         """Today's target arrival as a tz-aware datetime, or ``None`` if none.
@@ -177,6 +181,26 @@ class TripRecommendation:
     fallback: TrainOption | None = None
     terminal: str | None = None
     borough: str | None = None
+    # The trip's optional lead-in window (#50), carried through so a consumer can
+    # decide visibility against the request clock (see :meth:`visible_at`).
+    show_before_minutes: float | None = None
+
+    def visible_at(self, now: datetime) -> bool:
+        """Whether this trip's recommendation strip should show at ``now`` (#50).
+
+        No target today -> never (a weekend has nothing to recommend). No window
+        configured -> always, the original behavior. Otherwise visible only in the
+        lead-in window ``[target - show_before_minutes, target]`` -- so the strip
+        appears as the train approaches and disappears once its moment has passed,
+        rather than sitting on the board all day and wasting vertical space.
+        """
+        if self.target is None:
+            return False
+        if self.show_before_minutes is None:
+            return True
+        now = now.astimezone(EASTERN) if now.tzinfo else now.replace(tzinfo=EASTERN)
+        start = self.target - timedelta(minutes=self.show_before_minutes)
+        return start <= now <= self.target
 
 
 def _resolve_stop(
@@ -261,6 +285,18 @@ def resolve_trips(
                 f"number, got {buffer!r}."
             )
 
+        show_before = cfg.get("show_before_minutes")
+        if show_before is not None and (
+            isinstance(show_before, bool)
+            or not isinstance(show_before, (int, float))
+            or show_before <= 0
+        ):
+            raise TripConfigError(
+                f"Trip {name!r}: show_before_minutes must be a positive number "
+                f"(minutes before the target to start showing the strip), got "
+                f"{show_before!r}."
+            )
+
         target = _validate_target(name, cfg.get("target"))
         try:
             boarding_name, origin_stop = _resolve_stop(index, boarding, line, direction)
@@ -280,6 +316,9 @@ def resolve_trips(
                 dest_stop=dest_stop,
                 target=target,
                 arrive_buffer_minutes=float(buffer),
+                show_before_minutes=(
+                    float(show_before) if show_before is not None else None
+                ),
             )
         )
     return resolved
@@ -314,6 +353,8 @@ def recommend_trip(
         # the direction without re-deriving it; None when the group is absent.
         terminal=group.terminal if group else None,
         borough=group.borough if group else None,
+        # Carry the lead-in window (#50) so visibility is decided per request clock.
+        show_before_minutes=trip.show_before_minutes,
     )
     if target is None:
         return base

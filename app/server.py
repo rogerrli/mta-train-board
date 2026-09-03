@@ -104,12 +104,14 @@ def _serialize_train_option(option: TrainOption | None) -> dict[str, Any] | None
     }
 
 
-def _serialize_recommendation(rec: TripRecommendation) -> dict[str, Any]:
+def _serialize_recommendation(rec: TripRecommendation, now: datetime) -> dict[str, Any]:
     """One arrive-by trip recommendation (#27) as JSON.
 
     Absolute times (``leave_by``, ``departure``, ``arrival``, ``target``) are sent
     so the board can recompute "leave in N min" every second between polls, the
-    same way it reclassifies catchability (#8).
+    same way it reclassifies catchability (#8). ``visible`` (#50) is decided here
+    against the request clock -- like the focus window -- so the strip flips in and
+    out at its lead-in boundary regardless of when the last feed poll landed.
     """
     return {
         "name": rec.name,
@@ -126,6 +128,9 @@ def _serialize_recommendation(rec: TripRecommendation) -> dict[str, Any]:
         "borough": rec.borough,
         "target": rec.target.isoformat() if rec.target else None,
         "status": rec.status,
+        # Whether the strip should show now (#50): false outside the trip's
+        # lead-in window (or on a no-target day). The board drops hidden trips.
+        "visible": rec.visible_at(now),
         "recommended": _serialize_train_option(rec.recommended),
         "fallback": _serialize_train_option(rec.fallback),
     }
@@ -158,6 +163,7 @@ def build_state(
     recommendations: list[TripRecommendation] | None = None,
     focus_trip: str | None = None,
     alerts: list[Alert] | None = None,
+    now: datetime | None = None,
     stale: bool = False,
     age_seconds: int = 0,
     refresh_interval_seconds: float = 30.0,
@@ -170,10 +176,14 @@ def build_state(
     ``refresh_interval_seconds`` tells the board how often to re-poll this endpoint.
     ``focus_trip`` is the name of the trip a scheduled-focus rule (#39) has active
     right now, or ``None``; when set, the payload's ``focus`` directive tells the
-    board to dedicate the screen to that trip. ``alerts`` are the service alerts
-    (#13) matched to the watched lines; the board badges affected line groups and
-    shows the text on tap. Pure and offline -- unit-testable.
+    board to dedicate the screen to that trip. ``now`` is the request clock each
+    recommendation's #50 lead-in visibility is decided against (defaults to the
+    current Eastern time). ``alerts`` are the service alerts (#13) matched to the
+    watched lines; the board badges affected line groups and shows the text on
+    tap. Pure and offline -- unit-testable.
     """
+    if now is None:
+        now = datetime.now(EASTERN)
     # Insertion-ordered dict groups by station while preserving config order.
     stations: dict[str, dict[str, Any]] = {}
     for g in groups:
@@ -203,7 +213,7 @@ def build_state(
         "refresh_interval_seconds": refresh_interval_seconds,
         "stations": list(stations.values()),
         # Arrive-by trip recommendations (#27); empty when no [[trips]] configured.
-        "trips": [_serialize_recommendation(r) for r in (recommendations or [])],
+        "trips": [_serialize_recommendation(r, now) for r in (recommendations or [])],
         # Active scheduled-focus directive (#39): which trip to dedicate the board
         # to (its recommendation, terminal label and all, is in trips[] above),
         # or null when no rule is active.
@@ -247,6 +257,7 @@ def state() -> dict[str, Any]:
         recommendations=snapshot.recommendations,
         focus_trip=active.trip if active else None,
         alerts=snapshot.alerts,
+        now=now,
         stale=poller.is_stale(snapshot, now=now),
         age_seconds=int(poller.age_seconds(snapshot, now=now)),
         refresh_interval_seconds=poller.refresh_seconds,
