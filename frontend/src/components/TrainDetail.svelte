@@ -2,20 +2,25 @@
   import { liveArrivals, bulletTextColor } from "../lib/format.js";
   import Modal from "./Modal.svelte";
   import ArrivalList from "./ArrivalList.svelte";
+  import AlertList from "./AlertList.svelte";
 
   // Tap-a-train detail overlay (issue #9): a fuller breakdown for one
   // station x line x direction than the glance board shows. `group` is the live
   // group object from the latest payload, so the list ticks down and refreshes
   // on every poll just like the board; `station` is its station name (the group
   // itself doesn't carry it -- the API nests groups under the station). The Modal
-  // shell owns dismiss (✕ / backdrop / Escape).
-  let { group, station, now, onclose } = $props();
+  // shell owns dismiss (✕ / backdrop / Escape). `alerts` are the board's service
+  // alerts (#13); we show the ones on this group's line above the arrivals -- the
+  // text behind the badge the board row carries.
+  let { group, station, now, alerts = [], onclose } = $props();
 
   const arrivals = $derived(liveArrivals(group, now));
   const textColor = $derived(bulletTextColor(group.color));
   // Terminal-station label (#41) as the primary destination text, matching the
   // board; falls back to the compass word ("Northbound") when unconfigured.
   const primary = $derived(group.terminal ?? group.direction_label);
+
+  const lineAlerts = $derived(alerts.filter((a) => a.lines.includes(group.line)));
 </script>
 
 <Modal label="{group.line} to {primary} at {station}" {onclose}>
@@ -31,6 +36,7 @@
   </header>
 
   <div class="body">
+    <AlertList alerts={lineAlerts} />
     <ArrivalList {arrivals} fallbackDest={primary} />
   </div>
 </Modal>

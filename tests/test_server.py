@@ -263,6 +263,37 @@ def test_build_state_serializes_recommendation_terminal_label():
     assert (bare["terminal"], bare["borough"]) == (None, None)
 
 
+def test_build_state_serializes_alerts():
+    # Service alerts (#13): the matched alerts are serialized into the `alerts`
+    # slot with absolute times, so the board can badge lines and show detail.
+    from app.alerts import Alert
+
+    start = NOW.replace(hour=22)
+    alert = Alert(
+        id="p1",
+        lines=("A", "C"),
+        header="No C trains overnight.",
+        description="Take the A instead.",
+        alert_type="Planned - Suspended",
+        active=False,
+        start=start,
+        end=None,
+    )
+    payload = server.build_state([], NOW, alerts=[alert])
+    assert payload["alerts"] == [
+        {
+            "id": "p1",
+            "lines": ["A", "C"],
+            "header": "No C trains overnight.",
+            "description": "Take the A instead.",
+            "alert_type": "Planned - Suspended",
+            "active": False,
+            "start": start.isoformat(),
+            "end": None,
+        }
+    ]
+
+
 # --- endpoints ---------------------------------------------------------------
 
 

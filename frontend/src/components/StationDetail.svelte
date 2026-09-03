@@ -6,6 +6,7 @@
   } from "../lib/format.js";
   import Modal from "./Modal.svelte";
   import ArrivalList from "./ArrivalList.svelte";
+  import AlertList from "./AlertList.svelte";
 
   // Tap-a-station consolidated view (issue #10): everything happening at one
   // stop, in one place. Every watched line/direction group at the station, each
@@ -13,7 +14,9 @@
   // detail, #9, via ArrivalList) and catchable/hurry/missed tags. `station` is
   // the live station object from the latest payload, so the lists tick down and
   // refresh on every poll just like the board. The Modal shell owns dismiss.
-  let { station, now, onclose } = $props();
+  // `alerts` are the board's service alerts (#13); we show any on this station's
+  // lines above the groups.
+  let { station, now, alerts = [], onclose } = $props();
 
   // Per-group primary label + live arrivals, recomputed each tick. Terminal-station
   // label (#41) as the destination text, falling back to the compass word.
@@ -30,8 +33,13 @@
   // otherwise, so the header simply omits it.
   const walk = $derived(stationWalkMinutes(station));
 
-  // TODO(#13): service alerts for this station's lines land here once the API's
-  // `alerts` slot is populated -- render them above the groups.
+  // Service alerts (#13) touching any line this station watches, current-first
+  // (the API already sorts them). Shown above the groups so a disruption reads
+  // before the countdowns.
+  const stationLines = $derived(new Set(station.arrivals.map((g) => g.line)));
+  const stationAlerts = $derived(
+    alerts.filter((a) => a.lines.some((line) => stationLines.has(line))),
+  );
 </script>
 
 <Modal label="All trains at {station.name}" {onclose}>
@@ -43,6 +51,7 @@
   </header>
 
   <div class="body">
+    <AlertList alerts={stationAlerts} />
     {#each groups as g, i (g.group.line + g.group.direction + i)}
       <section class="group">
         <div class="group-head">

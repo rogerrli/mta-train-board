@@ -8,7 +8,9 @@
   // across config blocks (see the key note below). `onstationselect(name)` fires
   // when the station name is tapped, opening the consolidated station view
   // (issue #10) -- a separate target from the group rows so both coexist.
-  let { station, now, onselect, onstationselect } = $props();
+  // `alerts` are the board's service alerts (#13), passed to each group so it can
+  // badge itself when one names its line (LineGroup filters by line).
+  let { station, now, onselect, onstationselect, alerts = [] } = $props();
 
   // Weight for content-proportional sizing (issue #40): each group contributes
   // its row plus its trains, so a station we watch more heavily claims more of
@@ -33,7 +35,12 @@
          in two config blocks with an overlapping direction, and a duplicate key
          is a hard render error. Group order is config-stable, so the index is. -->
     {#each station.arrivals as group, i (group.line + group.direction + i)}
-      <LineGroup {group} {now} onselect={() => onselect(station.name, i)} />
+      <LineGroup
+        {group}
+        {now}
+        {alerts}
+        onselect={() => onselect(station.name, i)}
+      />
     {/each}
   </div>
 </section>

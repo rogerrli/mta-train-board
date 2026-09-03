@@ -23,6 +23,13 @@
 
   const stations = $derived($board.payload?.stations ?? []);
 
+  // Service alerts (issue #13), matched to the watched lines server-side and
+  // sorted current-first. Each carries the affected `lines`, so a station's line
+  // group badges itself (LineGroup) and the tap-through detail overlays show the
+  // text. Line-level matching (owner's call): an alert on a watched line badges
+  // every group on that line, whichever station shows it.
+  const alerts = $derived($board.payload?.alerts ?? []);
+
   // Tapped-train detail overlay (issue #9). We remember the selection by station
   // name + group index, not the group object, then re-derive the live group from
   // the latest payload each render -- so the overlay ticks and refreshes on every
@@ -103,6 +110,7 @@
             <Station
               {station}
               {now}
+              {alerts}
               onselect={(name, index) => {
                 selectedStation = null;
                 selected = { station: name, index };
@@ -124,6 +132,7 @@
     group={selectedGroup}
     station={selected.station}
     {now}
+    {alerts}
     onclose={() => (selected = null)}
   />
 {/if}
@@ -132,6 +141,7 @@
   <StationDetail
     station={selectedStationObj}
     {now}
+    {alerts}
     onclose={() => (selectedStation = null)}
   />
 {/if}

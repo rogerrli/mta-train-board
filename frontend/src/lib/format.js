@@ -122,6 +122,46 @@ export function stationWalkMinutes(station) {
   return values.size === 1 ? [...values][0] : null;
 }
 
+// The NY calendar day (YYYY-MM-DD) for a time value, so day comparisons are made
+// in the board's timezone regardless of the device's.
+function nyDay(value) {
+  return new Date(value).toLocaleDateString("en-CA", {
+    timeZone: "America/New_York",
+  });
+}
+
+// clockTime, but tagged with a weekday ("5:00 AM Fri") when the value lands on a
+// different NY day than `now` -- so an overnight window ("10:00 PM – 5:00 AM Fri")
+// doesn't read as the same evening. Same-day values stay bare.
+function clockTimeDay(value, now) {
+  const time = clockTime(value);
+  if (!time || nyDay(value) === nyDay(now)) return time;
+  const weekday = new Date(value).toLocaleDateString([], {
+    weekday: "short",
+    timeZone: "America/New_York",
+  });
+  return `${time} ${weekday}`;
+}
+
+// One-line timing for a service alert (issue #13). A live disruption reads "In
+// effect" (with an end time when the feed bounds it); an upcoming/planned change
+// reads its window, "Starts 5:00 PM" or "5:00 PM – 9:00 PM". Times are pinned to
+// New York via clockTime, and any bound on a different day than `now` carries its
+// weekday so an overnight window isn't ambiguous. Returns "" for an open-ended,
+// unbounded alert (nothing useful to say about its timing).
+export function alertTiming(alert, now = Date.now()) {
+  const { active, start, end } = alert;
+  if (active) {
+    return end ? `In effect until ${clockTimeDay(end, now)}` : "In effect now";
+  }
+  if (start) {
+    return end
+      ? `${clockTimeDay(start, now)} – ${clockTimeDay(end, now)}`
+      : `Starts ${clockTimeDay(start, now)}`;
+  }
+  return "";
+}
+
 // "just now" / "12s ago" / "3m ago" for the freshness indicator.
 export function agoLabel(seconds) {
   if (seconds < 5) return "just now";

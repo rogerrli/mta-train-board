@@ -23,6 +23,16 @@ EASTERN = ZoneInfo("America/New_York")
 NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=EASTERN)
 
 
+@pytest.fixture(autouse=True)
+def _offline_alerts(monkeypatch):
+    """Keep poll_once offline by default: stub the alerts fetch (#13) to [].
+
+    poll_once fetches service alerts each cycle; without this every poll test
+    would reach the network. Tests that exercise alert behavior re-patch it.
+    """
+    monkeypatch.setattr(poller_mod, "fetch_alerts", lambda *a, **k: [])
+
+
 class _StopLoop(Exception):
     """Sentinel raised from the patched sleep to break the poll loop in tests."""
 
@@ -159,6 +169,56 @@ def test_poll_once_degrades_gracefully_on_invalid_focus_rule(monkeypatch, caplog
     assert snapshot.groups  # the board is still served
     assert snapshot.focus_rules == []  # focus quietly disabled
     assert "focus" in caplog.text.lower()
+
+
+def test_poll_once_fetches_alerts_for_the_watched_lines(monkeypatch):
+    # Service alerts (#13): each poll fetches alerts for the lines the board's
+    # groups name, and stores them on the snapshot. The set is derived from the
+    # groups, so it needs no extra config parse.
+    from app.alerts import Alert
+
+    captured: dict[str, object] = {}
+    alert = Alert(
+        id="a1",
+        lines=("Q",),
+        header="Delays",
+        description="",
+        alert_type="Delays",
+        active=True,
+        start=None,
+        end=None,
+    )
+
+    def fake_fetch_alerts(watched_lines, *, now=None, **k):
+        captured["watched"] = set(watched_lines)
+        return [alert]
+
+    monkeypatch.setattr(poller_mod, "fetch_board", lambda *a, **k: ([_group()], []))
+    monkeypatch.setattr(poller_mod, "load_config", lambda: {})
+    monkeypatch.setattr(poller_mod, "fetch_alerts", fake_fetch_alerts)
+
+    snapshot = Poller(refresh_seconds=30).poll_once()
+
+    assert captured["watched"] == {"Q"}  # the group's line
+    assert snapshot.alerts == [alert]
+
+
+def test_poll_once_tolerates_an_alerts_feed_failure(monkeypatch, caplog):
+    # Alerts are a secondary enhancement: an alerts-feed error must NOT fail the
+    # poll and blank the board -- it's logged and the board is served without them.
+    def boom(*a, **k):
+        raise FeedError("alerts feed down")
+
+    monkeypatch.setattr(poller_mod, "fetch_board", lambda *a, **k: ([_group()], []))
+    monkeypatch.setattr(poller_mod, "load_config", lambda: {})
+    monkeypatch.setattr(poller_mod, "fetch_alerts", boom)
+
+    with caplog.at_level("WARNING"):
+        snapshot = Poller(refresh_seconds=30).poll_once()
+
+    assert snapshot.groups  # the board is still served
+    assert snapshot.alerts == []  # alerts quietly dropped
+    assert "alerts" in caplog.text.lower()
 
 
 def test_run_caches_snapshot_and_sleeps_normal_interval(monkeypatch):
