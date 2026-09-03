@@ -95,6 +95,21 @@ export function leaveInMinutes(iso, now = Date.now()) {
   return Math.max(0, minutesUntil(iso, now));
 }
 
+// The station's walk time (issue #10), for the consolidated station view header.
+// walk_minutes is carried per line/direction group but is a station-level setting
+// (the config repeats the same value across a station's blocks). Return that
+// shared value when every configured group agrees; return null when no group has
+// a walk time, or when they disagree (a misconfiguration -- rather than pick one
+// arbitrarily for the header, omit it and let the per-train catchability tags
+// carry the urgency).
+export function stationWalkMinutes(station) {
+  const values = new Set();
+  for (const g of station.arrivals) {
+    if (g.walk_minutes != null) values.add(g.walk_minutes);
+  }
+  return values.size === 1 ? [...values][0] : null;
+}
+
 // "just now" / "12s ago" / "3m ago" for the freshness indicator.
 export function agoLabel(seconds) {
   if (seconds < 5) return "just now";
