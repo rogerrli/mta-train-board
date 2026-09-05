@@ -248,15 +248,20 @@
   /* Uniform grid of equal cells (issue #50, reverting the #40 proportional
      flex-wrap that made uneven cards and clipped countdowns). `--cols` is the
      station count capped at 2, so the typical ~4 stations sit in a compact 2x2.
-     `align-content: start` packs the rows to the top and sizes them to their
-     content -- cards stay only as tall as they need instead of stretching to
-     fill, so the countdowns get their horizontal room back. */
+     `align-content: center` sizes the rows to their content -- cards stay only
+     as tall as they need instead of stretching to fill, so the countdowns get
+     their horizontal room back (the #50 goal) -- while splitting the leftover
+     vertical space top/bottom instead of pooling it below the cards (issue #71,
+     the dead gap left once #55 hid the arrive-by banner outside focus windows).
+     `safe` falls back to top-alignment if the rows ever overflow the height (many
+     stations on a short viewport), so a centered block can't clip the top row
+     off the kiosk's overflow:hidden and hide the first station. */
   .stations {
     flex: 1;
     min-height: 0;
     display: grid;
     grid-template-columns: repeat(var(--cols), 1fr);
-    align-content: start;
+    align-content: safe center;
     gap: var(--gap);
   }
 
