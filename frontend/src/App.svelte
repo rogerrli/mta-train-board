@@ -76,7 +76,9 @@
   // Arrive-by recommendations (issue #27). The server marks each trip `visible`
   // (issue #50): false on a no-target day (e.g. a weekend) and outside the trip's
   // configured lead-in window, so the strip only takes board space when a train
-  // is actually in play -- then the station grid reclaims the rest.
+  // is actually in play -- then the station grid reclaims the rest. Note the
+  // banner is *also* gated on an active focus window below (issue #55): outside
+  // every focus window the board is plain glance-only, no arrive-by strip.
   const trips = $derived(
     ($board.payload?.trips ?? []).filter((t) => t.visible),
   );
@@ -160,7 +162,12 @@
     {#if showFocus}
       <FocusView trip={focusTrip} {now} ondismiss={() => (dismissed = true)} />
     {:else}
-      {#if trips.length > 0}
+      <!-- Arrive-by strip only while a focus window is active (issue #55). The
+           `focus` directive is non-null exactly when a focus rule is firing; a
+           window the user dismissed back to the glance board (#60) still counts
+           as active, so the banner rides along there. Outside every window the
+           board is plain glance-only -- no stale "late for 9:30 AM" strip. -->
+      {#if focus != null && trips.length > 0}
         <div class="recommendations">
           {#each trips as trip (trip.name)}
             <Recommendation {trip} {now} />
