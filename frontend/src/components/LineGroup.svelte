@@ -78,9 +78,14 @@
      plain board row. Chrome reset + tap/hover/focus feedback come from the shared
      .tap-reset (app.css); this only sets its layout. */
   .group {
-    display: flex;
+    /* A subgrid over the card's column tracks (issue #67): the row spans all of
+       the card's columns and borrows their sizing, so its bullet, direction, and
+       countdowns land in the same columns as every other row in the card. The
+       column gap is inherited from the card (Station.svelte). */
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
     align-items: center;
-    gap: clamp(0.4rem, 1vw, 0.8rem);
     min-width: 0;
     width: 100%;
     padding: clamp(0.1rem, 0.4vh, 0.3rem) clamp(0.2rem, 0.6vw, 0.5rem);
@@ -127,11 +132,10 @@
   }
 
   .dir {
-    /* The countdowns are what matters (issue #50): give them priority and let
-       this label yield first. It has a preferred width but may shrink (its
-       terminal text clamps to two lines, borough ellipsizes) so the times keep
-       their room and never clip at the card edge. */
-    flex: 0 1 clamp(4.5rem, 12vw, 8rem);
+    /* Column 2 of the card grid (issue #67). The countdowns are what matters
+       (issue #50): this column's preferred width lives on the card track and may
+       shrink to nothing (its terminal text clamps to two lines, borough
+       ellipsizes) so the times keep their room and never clip at the card edge. */
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -170,18 +174,25 @@
   }
 
   .times {
-    /* Never shrink the countdowns (issue #50): they hold their natural width so
-       all GLANCE_LIMIT of them stay fully visible; the .dir label yields instead. */
-    flex: none;
-    display: flex;
-    /* Sit the countdowns on a common bottom line. The flip digits (#53) are
-       inline-blocks whose baseline is their bottom edge, so bottom-align keeps
-       the lead number and the rest aligned regardless of that baseline. */
-    align-items: flex-end;
-    gap: clamp(0.5rem, 1.6vw, 1.2rem);
+    /* The countdown columns (issue #67): a subgrid over the card's time tracks
+       (cols 3-6) so all GLANCE_LIMIT countdowns line up down the card. Each
+       countdown auto-places into the next track; the lead sits in the first,
+       widest one (it's the biggest number) and still aligns. A short line leaves
+       its trailing tracks blank, keeping the columns straight. Never shrinks, so
+       the times stay fully visible and the .dir label yields instead (issue #50).
+       Bottom-align so the larger lead and the rest sit on a common line -- the
+       flip digits (#53) are inline-blocks whose baseline is their bottom edge. */
+    grid-column: 3 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: end;
   }
 
   .min {
+    /* Sit at the start of the countdown's column so the numbers line up on a
+       common left edge and the MISSED strike wraps just the number, not the
+       track's trailing space. */
+    justify-self: start;
     font-size: clamp(1.2rem, 3.4vh, 2.4rem);
     font-weight: 800;
     line-height: 1;
@@ -221,6 +232,9 @@
   }
 
   .none {
+    /* No countdowns to place -- span the card's time tracks so the message reads
+       across the row instead of being squeezed into the first column. */
+    grid-column: 1 / -1;
     font-size: clamp(0.9rem, 2.4vh, 1.4rem);
     color: var(--text-faint);
     font-style: italic;
