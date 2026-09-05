@@ -19,6 +19,12 @@ stale_after_seconds = 90
 # minutes of your walk time is only makeable if you move fast. Default 1.
 walk_best_case_delta_minutes = 1
 
+# Transfer-crowding window, in minutes (issue #28; see [[transfer_crowding]]
+# below). A feeder line's train arriving within this many minutes before one of
+# your trains flags yours as "likely crowded"; your train arriving within this
+# window before a feeder "beats the crowd". Default 2.
+transfer_crowd_window_minutes = 2
+
 # Focus mode (see [[focus]] below) plays an audible chime this many minutes
 # before you need to leave to catch the recommended train, as a heads-up from
 # across the room. The board beeps once per departure and re-arms when a later
@@ -85,6 +91,37 @@ name = "Fulton St"
 lines = ["A", "C"]
 directions = ["N"]
 walk_minutes = 4
+
+# Transfer-crowding hints (issue #28) --------------------------------------
+#
+# At a transfer complex, a train on your line that pulls in right after another
+# line's train tends to board crowded -- riders spill off the first train and
+# pile onto yours. This flags those trains ("likely crowded -- follows the L")
+# and marks a train that arrives ahead of the crowd, so the board can gently
+# steer you to the comfortable one. It's purely advisory: it never hides or
+# de-prioritizes a train you actually need to catch.
+#
+# Add one [[transfer_crowding]] block per (complex, line) you want annotated.
+#
+#   name     The transfer complex, by station NAME (same convention as
+#            [[stations]] -- never a raw stop ID).
+#   line     Your line at that complex -- the one whose trains get the hint.
+#   feeders  The other lines there whose arriving riders crowd your line. A
+#            feeder counts whichever direction it's going (a transfer crowd
+#            spills both ways).
+#
+# Both `line` and every `feeder` must also be configured as [[stations]] at this
+# complex (above), so their live arrivals are on the board -- the crowding check
+# reads those, it doesn't fetch anything extra. The adjacency window is
+# transfer_crowd_window_minutes (top of file).
+
+# Example: at Times Sq-42 St the N/Q/R/W platform gets a wave off the 1/2/3, so
+# flag the N when a 1/2/3 pulls in just before it. Both line-sets are configured
+# as [[stations]] above. Swap in your own complex in config.local.toml.
+[[transfer_crowding]]
+name = "Times Sq-42 St"
+line = "N"
+feeders = ["1", "2", "3"]
 
 # Direction labels. Riders think in terminals ("the uptown 1 to Van Cortlandt
 # Park"), not compass words, so the board can label each line/direction by its

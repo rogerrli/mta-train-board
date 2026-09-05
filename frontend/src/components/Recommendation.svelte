@@ -17,6 +17,19 @@
   const textColor = $derived(bulletTextColor(trip.color));
   const leaveIn = $derived(rec ? leaveInMinutes(rec.leave_by, now) : null);
   const target = $derived(clockTime(trip.target));
+  // Transfer-crowding comfort note (#28), advisory only. A crowded pick points at
+  // the earlier fallback when that one beats the crowd; a pick that beats the
+  // crowd gets a quiet nod. Null otherwise (no rule / no adjacent feeder).
+  const comfort = $derived.by(() => {
+    if (!rec) return null;
+    if (rec.crowding === "crowded") {
+      return trip.fallback?.crowding === "beats_crowd"
+        ? "likely crowded — the earlier train beats the crowd"
+        : "likely crowded from a transfer";
+    }
+    if (rec.crowding === "beats_crowd") return "beats the transfer crowd";
+    return null;
+  });
 </script>
 
 <section class="rec {trip.status}">
@@ -48,6 +61,9 @@
         {/if}
         <span class="target">for {target}</span>
       </div>
+      {#if comfort}
+        <div class="comfort {rec.crowding}">{comfort}</div>
+      {/if}
       {#if trip.fallback}
         <div class="fallback">
           or the {clockTime(trip.fallback.departure)} — arrives {clockTime(
@@ -171,6 +187,20 @@
     margin-top: 0.2em;
     color: var(--text-faint);
     font-size: clamp(0.68rem, 1.7vh, 1rem);
+  }
+
+  /* Transfer-crowding comfort note (#28): advisory, so it stays quiet -- warm for
+     a crowded pick, calm-green when the pick beats the crowd. */
+  .comfort {
+    margin-top: 0.15em;
+    font-size: clamp(0.68rem, 1.7vh, 1rem);
+    font-weight: 600;
+  }
+  .comfort.crowded {
+    color: var(--hurry);
+  }
+  .comfort.beats_crowd {
+    color: #35c759;
   }
 
   .leave {

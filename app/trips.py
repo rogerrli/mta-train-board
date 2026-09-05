@@ -42,6 +42,7 @@ one-off target is a deliberate follow-up too; config is the source of truth here
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -51,13 +52,22 @@ from typing import Any, Literal
 from app.arrivals import (
     DEFAULT_LIMIT,
     ArrivalGroup,
+    CrowdingHint,
     compute_arrivals,
     minutes_until,
     resolve_and_fetch,
 )
+from app.crowding import (
+    CrowdingConfigError,
+    annotate_crowding,
+    resolve_crowding_rules,
+    validated_crowd_window,
+)
 from app.feeds import EASTERN
 from app.stops import ResolvedStation, StopIndex
 from app.travel import travel_time as default_travel_time
+
+logger = logging.getLogger(__name__)
 
 # Weekday abbreviations indexed by ``datetime.weekday()`` (Mon=0 .. Sun=6). These
 # are the valid per-day keys in a trip's ``target`` table, alongside ``default``.
@@ -154,6 +164,9 @@ class TrainOption:
     arrival: datetime | None
     on_time: bool
     lateness_minutes: int
+    # Transfer-crowding hint (#28), carried from the boarding train's Arrival so a
+    # consumer can flag a packed pick and prefer a fallback that beats the crowd.
+    crowding: CrowdingHint | None = None
 
 
 @dataclass(frozen=True)
@@ -324,6 +337,25 @@ def resolve_trips(
     return resolved
 
 
+def _comfort_fallback(
+    recommended: TrainOption, earlier: list[TrainOption]
+) -> TrainOption | None:
+    """Pick the fallback among the earlier on-time trains (#28 comfort tiebreaker).
+
+    Normally the on-time train right before the recommended one (an earlier
+    cushion). But when the recommended pick is likely ``crowded``, prefer the
+    latest earlier on-time train that ``beats_crowd`` -- a comfier cushion, if one
+    exists. Never touches the recommended pick, so a needed train is never demoted.
+    """
+    if not earlier:
+        return None
+    if recommended.crowding == "crowded":
+        beats = [c for c in earlier if c.crowding == "beats_crowd"]
+        if beats:
+            return beats[-1]
+    return earlier[-1]
+
+
 def recommend_trip(
     trip: ResolvedTrip,
     group: ArrivalGroup | None,
@@ -387,6 +419,9 @@ def recommend_trip(
                     if dest_arrival is None or on_time
                     else max(0, math.ceil((dest_arrival - target).total_seconds() / 60))
                 ),
+                # Carry the boarding train's crowding hint (#28) so the UI can flag
+                # a packed recommendation and the fallback can beat the crowd.
+                crowding=arrival.crowding,
             )
         )
 
@@ -396,9 +431,13 @@ def recommend_trip(
     on_time_options = [c for c in candidates if c.on_time]
     if on_time_options:
         # Ideal = latest train that still arrives on time (leave as late as you
-        # can); fallback = the on-time train right before it (an earlier cushion).
+        # can) -- never demoted by crowding, so a train you need to catch is never
+        # de-prioritized (#28's rule). Fallback = an earlier on-time cushion: the
+        # one right before it, but as a comfort tiebreaker, when the pick is likely
+        # crowded, prefer the latest earlier on-time train that beats the crowd.
         recommended = on_time_options[-1]
-        fallback = on_time_options[-2] if len(on_time_options) > 1 else None
+        earlier = on_time_options[:-1]
+        fallback = _comfort_fallback(recommended, earlier)
         return replace(
             base, status="on_time", recommended=recommended, fallback=fallback
         )
@@ -473,6 +512,20 @@ def fetch_board(
         walk_best_case_delta=delta,
         direction_labels=direction_labels,
     )
+    # Tag transfer-crowding hints (#28) on the deep groups before the board slice
+    # and the recommendations, so both see them. Crowding is an advisory comfort
+    # layer: a malformed [[transfer_crowding]] block must never blank the board, so
+    # log it and serve arrivals without hints rather than failing the poll (which
+    # would strand /api/state at 503 -- unlike a trip config error, this degrades).
+    try:
+        rules = resolve_crowding_rules(config, index=index)
+        groups = annotate_crowding(
+            groups, rules, window_minutes=validated_crowd_window(config)
+        )
+    except CrowdingConfigError as exc:
+        logger.warning(
+            "Ignoring invalid [[transfer_crowding]] config; crowding disabled: %s", exc
+        )
     recommendations = (
         recommend_trips(trips, groups, now, travel_time=travel_time) if trips else []
     )

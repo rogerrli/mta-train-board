@@ -1,5 +1,10 @@
 <script>
-  import { catchabilityLabel, clockTime, countdownLabel } from "../lib/format.js";
+  import {
+    catchabilityLabel,
+    clockTime,
+    countdownLabel,
+    crowdingLabel,
+  } from "../lib/format.js";
 
   // The full per-line/direction arrival breakdown: one row per upcoming train
   // (countdown + destination + clock time + catchable/hurry/missed tag). Shared
@@ -19,6 +24,7 @@
   <ul class="list">
     {#each arrivals as a (a.trip_id)}
       {@const label = catchabilityLabel(a.catchability)}
+      {@const crowd = crowdingLabel(a.crowding)}
       <li class="row {a.catchability?.toLowerCase() ?? 'calm'}">
         <span class="count tnum">
           <span class="mins">{countdownLabel(a.minutes)}</span>
@@ -26,7 +32,14 @@
         </span>
         <span class="mid">
           <span class="dest">{a.headsign ?? fallbackDest}</span>
-          <span class="at tnum">{clockTime(a.arrival)}</span>
+          <span class="at tnum">
+            {clockTime(a.arrival)}
+            {#if crowd}
+              <!-- Transfer-crowding comfort note (#28): advisory, so it rides
+                   quietly next to the clock time rather than as a loud tag. -->
+              <span class="crowd {a.crowding}">· {crowd}</span>
+            {/if}
+          </span>
         </span>
         {#if label}
           <span class="tag">{label}</span>
@@ -92,6 +105,19 @@
   .at {
     font-size: clamp(0.8rem, 1.9vh, 1.1rem);
     color: var(--text-dim);
+  }
+
+  /* Transfer-crowding note (#28): a quiet comfort cue, not an urgency tag.
+     "Crowded" leans warm, "Beats crowd" calm-green, both kept light-weight so
+     they don't compete with the catchability styling. */
+  .crowd {
+    font-weight: 700;
+  }
+  .crowd.crowded {
+    color: var(--hurry);
+  }
+  .crowd.beats_crowd {
+    color: #35c759;
   }
 
   .tag {

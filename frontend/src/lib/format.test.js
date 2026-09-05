@@ -13,6 +13,7 @@ import {
   agoLabel,
   bulletTextColor,
   catchabilityLabel,
+  crowdingLabel,
   clockTime,
   alertTiming,
   leaveInMinutes,
@@ -113,6 +114,13 @@ test("catchabilityLabel names each band, nothing when unclassified", () => {
   assert.equal(catchabilityLabel("HURRY"), "Run");
   assert.equal(catchabilityLabel("MISSED"), "Missed");
   assert.equal(catchabilityLabel(null), null); // no walk time -> no label
+});
+
+test("crowdingLabel names the transfer-crowding hint, nothing when unset", () => {
+  assert.equal(crowdingLabel("crowded"), "Crowded");
+  assert.equal(crowdingLabel("beats_crowd"), "Beats crowd");
+  assert.equal(crowdingLabel(null), null); // no rule / no adjacent feeder
+  assert.equal(crowdingLabel(undefined), null);
 });
 
 test("clockTime pins the wall clock to New York, not the host's zone", () => {

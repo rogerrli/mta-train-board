@@ -40,6 +40,15 @@ DEFAULT_LIMIT = 4
 # so catchability is unknown and nothing is flagged.
 Catchability = Literal["CATCHABLE", "HURRY", "MISSED"]
 
+# Transfer-crowding comfort hint for a train at a watched transfer complex (#28).
+#   crowded      another line's train arrives just before this one, so a transfer
+#                crowd spills onto it -- it likely boards packed.
+#   beats_crowd  this train arrives just before a feeder line's train, so it gets
+#                out ahead of that crowd.
+# ``None`` means no crowding pattern applies (no rule, or no adjacent feeder). The
+# hint is advisory (see :mod:`app.crowding`); it never changes which trains show.
+CrowdingHint = Literal["crowded", "beats_crowd"]
+
 # Best-case walk is this many minutes faster than the configured worst-case walk;
 # the HURRY band is that grace window. Overridable via config (#8).
 DEFAULT_WALK_BEST_CASE_DELTA = 1
@@ -100,6 +109,8 @@ class Arrival:
     origin terminal where the feed omits arrival. ``headsign`` is the
     destination/terminal label. ``catchability`` classifies the train against the
     station's walk time (#8), or is ``None`` when no walk time is configured.
+    ``crowding`` is the advisory transfer-crowding hint (#28) -- ``None`` unless a
+    ``[[transfer_crowding]]`` rule tagged this train (see :mod:`app.crowding`).
     """
 
     minutes: int
@@ -107,6 +118,7 @@ class Arrival:
     trip_id: str
     headsign: str | None
     catchability: Catchability | None = None
+    crowding: CrowdingHint | None = None
 
 
 @dataclass(frozen=True)

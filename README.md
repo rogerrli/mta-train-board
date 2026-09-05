@@ -159,6 +159,7 @@ stop IDs from vendored MTA static data (`app/data/stations.csv`).
 refresh_interval_seconds = 30   # feed poll + UI refresh cadence, seconds
 stale_after_seconds = 90        # flag the board `stale` past this age
 walk_best_case_delta_minutes = 1 # best case is this many min faster than walk_minutes
+transfer_crowd_window_minutes = 2 # adjacency window for transfer-crowding hints
 alert_lead_minutes = 10         # focus-mode chime this many min before leave-by
 
 [[stations]]
@@ -199,6 +200,31 @@ Far Rockaway / Ozone Park / Lefferts) write whatever combined label reads best,
 e.g. `terminal = "Rockaway / Lefferts"`. Both `terminal` and `borough` are
 required in a block. A line/direction with no block falls back to
 "Northbound"/"Southbound", so you only label the ones you watch.
+
+#### Transfer-crowding hints
+
+At a transfer complex, a train on your line that pulls in right after another
+line's train tends to board crowded — riders spill off the first train and pile
+onto yours going their way. Optional `[[transfer_crowding]]` blocks flag those
+trains and mark ones that arrive **ahead of** the crowd, so the board can gently
+steer you to the comfortable train:
+
+```toml
+[[transfer_crowding]]
+name = "Times Sq-42 St"          # transfer complex, by station name
+line = "N"                       # your line — the one whose trains get the hint
+feeders = ["1", "2", "3"]        # other lines here whose riders crowd yours
+```
+
+A feeder train arriving within `transfer_crowd_window_minutes` (default 2)
+**before** one of your trains flags it `crowded`; your train arriving within that
+window before a feeder is marked `beats_crowd`. A feeder counts whichever
+direction it's headed (a transfer crowd spills both ways). Both `line` and every
+`feeder` must also be configured as `[[stations]]` at this complex so their live
+arrivals are on the board — the check reads those rather than fetching anything
+extra. The hint is **advisory**: it flags trains and nudges the arrive-by
+fallback toward a comfortable option, but never hides or de-prioritizes a train
+you actually need to catch.
 
 #### Arrive-by trips
 

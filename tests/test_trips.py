@@ -183,6 +183,70 @@ def test_on_time_picks_latest_on_time_train_with_earlier_fallback():
     assert rec.fallback.departure == now + timedelta(minutes=7)
 
 
+def _crowd_group(trip, specs, now, walk_minutes=6):
+    """An ArrivalGroup whose trains carry per-train crowding hints (#28).
+
+    ``specs`` is a list of ``(depart_minute, crowding)`` pairs.
+    """
+    arrivals = [
+        Arrival(
+            minutes=m,
+            arrival=now + timedelta(minutes=m),
+            trip_id=f"t{m}",
+            headsign="59 St-Columbus Circle",
+            crowding=crowding,
+        )
+        for m, crowding in specs
+    ]
+    return ArrivalGroup(
+        station=trip.boarding,
+        line=trip.line,
+        direction=trip.direction,
+        direction_label="Northbound",
+        color="#0039A6",
+        arrivals=arrivals,
+        walk_minutes=walk_minutes,
+    )
+
+
+def test_recommendation_carries_crowding_hint():
+    # The boarding train's crowding hint (#28) rides onto the recommended option.
+    trip = _trip()
+    now = WEDNESDAY_7_40
+    group = _crowd_group(trip, [(9, "crowded")], now)  # 07:49 -> 08:29, on time
+    rec = recommend_trip(trip, group, now, travel_time=_fixed_ride(40))
+    assert rec.status == "on_time"
+    assert rec.recommended.crowding == "crowded"
+
+
+def test_crowded_pick_prefers_a_fallback_that_beats_the_crowd():
+    # On-time boardable trains at 07:46/47/48/49 (all arrive <= 08:30). The latest
+    # (07:49) is the pick but boards crowded; the 07:47 beats the crowd, so it
+    # becomes the fallback ahead of the default (07:48, the one right before).
+    trip = _trip()
+    now = WEDNESDAY_7_40
+    group = _crowd_group(
+        trip, [(6, None), (7, "beats_crowd"), (8, None), (9, "crowded")], now
+    )
+    rec = recommend_trip(trip, group, now, travel_time=_fixed_ride(40))
+    assert rec.recommended.departure == now + timedelta(minutes=9)
+    assert rec.recommended.crowding == "crowded"
+    # Comfort tiebreaker: the beats-the-crowd 07:47, not the default second-latest.
+    assert rec.fallback.departure == now + timedelta(minutes=7)
+    assert rec.fallback.crowding == "beats_crowd"
+
+
+def test_uncrowded_pick_keeps_the_default_earlier_fallback():
+    # When the pick isn't crowded, crowding doesn't reshuffle the fallback: it stays
+    # the on-time train right before the pick (07:48), not the earlier beats_crowd one.
+    trip = _trip()
+    now = WEDNESDAY_7_40
+    group = _crowd_group(trip, [(7, "beats_crowd"), (8, None), (9, None)], now)
+    rec = recommend_trip(trip, group, now, travel_time=_fixed_ride(40))
+    assert rec.recommended.departure == now + timedelta(minutes=9)
+    assert rec.fallback.departure == now + timedelta(minutes=8)
+
+
 def test_no_earlier_on_time_train_leaves_fallback_none():
     trip = _trip()
     now = WEDNESDAY_7_40
