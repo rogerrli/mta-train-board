@@ -43,6 +43,7 @@ DEFAULT_REFRESH_SECONDS = 30.0
 DEFAULT_STALE_AFTER_SECONDS = 90.0  # ~3x refresh; board reads "old" past this.
 DEFAULT_MAX_BACKOFF_SECONDS = 300.0  # cap the retry interval during an outage.
 MIN_REFRESH_SECONDS = 5.0  # floor so a misconfigured interval can't hammer the MTA.
+DEFAULT_ALERT_LEAD_MINUTES = 10  # focus-mode leave-by heads-up lead time (#54).
 
 # How many trains per line/direction to keep in the cached board. The glance view
 # (issue #7) only renders the first few, but tapping a train opens a detail
@@ -87,12 +88,17 @@ class Poller:
         refresh_seconds: float = DEFAULT_REFRESH_SECONDS,
         stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
         max_backoff_seconds: float = DEFAULT_MAX_BACKOFF_SECONDS,
+        alert_lead_minutes: int = DEFAULT_ALERT_LEAD_MINUTES,
     ) -> None:
         # Clamp so a bad config value (0, negative, non-numeric) can't busy-loop
         # the feeds or crash asyncio.sleep(); float() fails fast on a non-number.
         self.refresh_seconds = max(float(refresh_seconds), MIN_REFRESH_SECONDS)
         self.stale_after_seconds = max(float(stale_after_seconds), 0.0)
         self.max_backoff_seconds = max(float(max_backoff_seconds), self.refresh_seconds)
+        # Frontend behavior value forwarded in /api/state (#54): the focus-mode
+        # board beeps this many minutes before leave-by. Clamp to a non-negative
+        # int; int() fails fast on a non-number.
+        self.alert_lead_minutes = max(int(alert_lead_minutes), 0)
         self._snapshot: Snapshot | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -106,6 +112,9 @@ class Poller:
             ),
             stale_after_seconds=cfg.get(
                 "stale_after_seconds", DEFAULT_STALE_AFTER_SECONDS
+            ),
+            alert_lead_minutes=cfg.get(
+                "alert_lead_minutes", DEFAULT_ALERT_LEAD_MINUTES
             ),
         )
 

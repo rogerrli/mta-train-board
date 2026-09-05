@@ -159,6 +159,7 @@ stop IDs from vendored MTA static data (`app/data/stations.csv`).
 refresh_interval_seconds = 30   # feed poll + UI refresh cadence, seconds
 stale_after_seconds = 90        # flag the board `stale` past this age
 walk_best_case_delta_minutes = 1 # best case is this many min faster than walk_minutes
+alert_lead_minutes = 10         # focus-mode chime this many min before leave-by
 
 [[stations]]
 name = "Times Sq-42 St"          # exact MTA station name
@@ -262,6 +263,16 @@ rule on every refresh, so focus flips in/out right around the window boundary; t
 focus header reuses the trip's `[[direction_labels]]` terminal + borough (e.g. "A
 → Inwood-207 St", "Manhattan"). If two rules ever overlap, the **first listed wins**. A
 window crossing midnight isn't supported — split it into two rules.
+
+**Audible leave-by alert.** While a trip is focused, the board plays a short chime
+`alert_lead_minutes` (default 10) before you need to leave to catch the recommended
+train — a heads-up from across the room. It sounds **once per departure** and
+re-arms when a later train becomes the pick, and only for an **on-time**
+recommendation (never when the best train is already too late to make). Browsers
+block audio until a user gesture, so on first load the focused board shows a
+one-time **"Enable sound"** tap. On the Raspberry Pi kiosk, launch Chromium with
+`--autoplay-policy=no-user-gesture-required` so audio plays with no tap; where
+audio stays blocked the board degrades silently (no error).
 
 To customize, copy it to a local override (gitignored so your settings stay
 private):

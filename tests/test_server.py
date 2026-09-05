@@ -116,6 +116,7 @@ def test_build_state_empty_when_no_groups():
         "stale": False,
         "age_seconds": 0,
         "refresh_interval_seconds": 30.0,
+        "alert_lead_minutes": 10,
         "stations": [],
         "trips": [],
         "focus": None,
@@ -156,6 +157,13 @@ def test_build_state_serializes_trip_recommendation():
     assert trip["recommended"]["on_time"] is True
     assert trip["recommended"]["departure"] == departure.isoformat()
     assert trip["fallback"] is None
+
+
+def test_build_state_exposes_alert_lead_minutes():
+    # The focus-mode audible alert (#54) is frontend-driven; the payload just
+    # surfaces the configured lead time (default 10) so the board knows when to beep.
+    assert server.build_state([], NOW)["alert_lead_minutes"] == 10
+    assert server.build_state([], NOW, alert_lead_minutes=5)["alert_lead_minutes"] == 5
 
 
 def test_build_state_passes_through_staleness():

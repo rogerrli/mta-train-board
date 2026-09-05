@@ -19,6 +19,16 @@ stale_after_seconds = 90
 # minutes of your walk time is only makeable if you move fast. Default 1.
 walk_best_case_delta_minutes = 1
 
+# Focus mode (see [[focus]] below) plays an audible chime this many minutes
+# before you need to leave to catch the recommended train, as a heads-up from
+# across the room. The board beeps once per departure and re-arms when a later
+# train becomes the pick. Default 10. Only fires for an on-time recommendation --
+# never when the best train is already too late to make. Browsers block audio
+# until a user gesture, so on first load the focused board shows a one-time
+# "Enable sound" tap; a Chromium kiosk launched with
+# --autoplay-policy=no-user-gesture-required skips that (see README).
+alert_lead_minutes = 10
+
 # Stations to watch. Add one [[stations]] block per station + line-set you care
 # about. You identify stations by NAME and the LINES you want -- never by raw
 # GTFS stop ID. At startup the app resolves each block to concrete stop IDs from
