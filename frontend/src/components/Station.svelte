@@ -70,9 +70,20 @@
   }
 
   .groups {
-    display: flex;
-    flex-direction: column;
-    gap: clamp(0.2rem, 0.7vh, 0.5rem);
+    /* Aligned countdown columns (issue #67): the card owns the column grid so
+       every line row drops its bullet, direction, and each countdown into the
+       same tracks. col 1 = route bullet (content-sized), col 2 = the direction
+       label (a preferred width that yields to 0 so the times never clip --
+       issue #50), cols 3-6 = the GLANCE_LIMIT countdowns. Each .group is a
+       subgrid spanning all six columns, so the tracks are shared down the whole
+       card and the times line up into scannable columns. The `repeat(4, ...)`
+       tracks the GLANCE_LIMIT (format.js) -- keep them in step. */
+    display: grid;
+    grid-template-columns: auto minmax(0, clamp(4.5rem, 12vw, 8rem)) repeat(4, auto);
+    row-gap: clamp(0.2rem, 0.7vh, 0.5rem);
+    /* A fixed, modest column gap: enough that the countdowns read as separate,
+       the same down every card -- not scaled per card or per viewport. */
+    column-gap: 0.7rem;
     min-height: 0;
     overflow: hidden;
   }
