@@ -47,9 +47,10 @@
       <span
         class="alert-badge"
         class:active={hasActiveAlert}
+        role="img"
         title="Service alert"
-        aria-label="Service alert">!</span
-      >
+        aria-label="Service alert"
+      ></span>
     {/if}
   </span>
   <span class="dir" class:named={group.terminal}>
@@ -106,25 +107,20 @@
     line-height: 1;
   }
 
-  /* Service-alert badge (#13): a small corner marker on the line bullet. Amber
-     and filled for a live disruption; dim for an upcoming/planned-only change. */
+  /* Service-alert marker (#13, #66): a small dot tucked into the bullet's
+     top-right, sized to signal an alert at a glance without covering the route
+     glyph. Amber for a live disruption; dim for an upcoming/planned-only change.
+     The dot is a fixed fraction of the bullet, so it stays clear of the letter
+     across the whole responsive clamp. */
   .alert-badge {
     position: absolute;
-    top: -0.2em;
-    right: -0.2em;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: clamp(0.9rem, 2.2vh, 1.4rem);
-    height: clamp(0.9rem, 2.2vh, 1.4rem);
-    padding: 0 0.15em;
-    border-radius: 999px;
+    top: 6%;
+    right: 6%;
+    width: clamp(0.4rem, 1vh, 0.65rem);
+    height: clamp(0.4rem, 1vh, 0.65rem);
+    border-radius: 50%;
     border: 1.5px solid var(--panel);
     background: var(--text-faint);
-    color: #000;
-    font-size: clamp(0.6rem, 1.6vh, 1rem);
-    font-weight: 900;
-    line-height: 1;
   }
   .alert-badge.active {
     background: var(--alert);
