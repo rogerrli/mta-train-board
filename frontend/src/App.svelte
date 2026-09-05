@@ -7,15 +7,33 @@
   import Recommendation from "./components/Recommendation.svelte";
   import FocusView from "./components/FocusView.svelte";
   import FocusReturn from "./components/FocusReturn.svelte";
+  import { createBeeper } from "./lib/sound.js";
+  import { createLeaveAlert } from "./lib/alert.js";
 
   const board = createBoard();
+  // Focus-mode leave-by alert (issue #54): a two-note chime as a heads-up
+  // `alert_lead_minutes` before you need to leave for the focused trip's #27
+  // recommendation. `beeper` owns the Web Audio sound + kiosk unlock; `leaveAlert`
+  // owns the "once per departure" arming. Both are plain objects, created once.
+  const beeper = createBeeper();
+  const leaveAlert = createLeaveAlert();
 
   // Wall-clock tick: drives the per-second countdown recompute across the board.
   let now = $state(Date.now());
 
+  // Whether audio is unlocked and can play without a user gesture. False until a
+  // tap on "Enable sound" resumes the context -- unless the Chromium kiosk flag
+  // (--autoplay-policy=no-user-gesture-required) started it running already, which
+  // the mount below detects so no tap is needed on the wall board.
+  let audioReady = $state(false);
+
   $effect(() => {
     board.start();
     const id = setInterval(() => (now = Date.now()), 1000);
+    // Detect the kiosk-flag case: creating the context reveals whether it starts
+    // "running" (flag set) or "suspended" (needs the tap). Harmless either way.
+    beeper.unlock();
+    audioReady = beeper.ready();
     return () => {
       board.stop();
       clearInterval(id);
@@ -94,6 +112,35 @@
 
   // The takeover shows only when a focus trip resolves and we haven't dismissed it.
   const showFocus = $derived(!!focusTrip && !dismissed);
+
+  // Audible leave-by alert (issue #54). Server-configured lead time (default 10);
+  // the board beeps once when the focused trip's on-time recommendation is first
+  // within this many minutes of its leave-by. `leaveAlert` de-dupes per departure
+  // and re-arms when a new train is recommended. We gate on `audioReady` before
+  // asking so a muted board doesn't consume a departure's one alert -- if you tap
+  // "Enable sound" while still inside the window, the next tick can still fire.
+  // Keyed on `focusTrip` (the focus window being active), not `showFocus`: a #60
+  // dismiss hides the takeover but you still want the across-the-room heads-up.
+  const leadMinutes = $derived($board.payload?.alert_lead_minutes ?? 10);
+
+  $effect(() => {
+    if (!audioReady) return;
+    if (leaveAlert.shouldFire(focusTrip, leadMinutes, now)) {
+      beeper.beep();
+    }
+  });
+
+  // One-time "Enable sound" tap: satisfies the browser autoplay gesture rule and
+  // confirms with a chime so you know the board can now be heard. This runs inside
+  // the click gesture, so we trust unlock()'s success rather than the context's
+  // state flag (resume() resolves async -- ready() can still read "suspended" for a
+  // tick right after the tap, which would wrongly leave the button up).
+  function enableSound() {
+    if (beeper.unlock()) {
+      audioReady = true;
+      beeper.beep();
+    }
+  }
 </script>
 
 <div class="board">
@@ -173,6 +220,15 @@
   />
 {/if}
 
+<!-- One-time audio unlock (issue #54). Shown with the focus takeover while audio
+     is still blocked -- the natural moment to grant the gesture so the leave-by
+     chime can play. (The alert itself keys on the focus window, not the takeover,
+     so a #60 dismiss doesn't silence an already-enabled board.) A Chromium kiosk
+     launched with --autoplay-policy=no-user-gesture-required never sees this. -->
+{#if showFocus && !audioReady}
+  <button class="enable-sound" onclick={enableSound}>🔊 Enable sound</button>
+{/if}
+
 <style>
   .board {
     height: 100%;
@@ -223,6 +279,26 @@
   code {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     color: var(--text-dim);
+  }
+
+  /* Unobtrusive audio-unlock pill, bottom-center over the focus board (#54). */
+  .enable-sound {
+    position: fixed;
+    bottom: calc(var(--gap) * 1.5);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.6rem 1.2rem;
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 2rem;
+    cursor: pointer;
+    opacity: 0.85;
+  }
+  .enable-sound:hover {
+    opacity: 1;
   }
 
   .spinner {

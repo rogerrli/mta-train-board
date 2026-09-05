@@ -167,6 +167,7 @@ def build_state(
     stale: bool = False,
     age_seconds: int = 0,
     refresh_interval_seconds: float = 30.0,
+    alert_lead_minutes: int = 10,
 ) -> dict[str, Any]:
     """Shape computed arrival groups into the ``/api/state`` payload.
 
@@ -211,6 +212,10 @@ def build_state(
         "stale": stale,
         "age_seconds": age_seconds,
         "refresh_interval_seconds": refresh_interval_seconds,
+        # Focus-mode audible alert (#54): how many minutes before a trip's
+        # leave-by the board beeps. The cue is frontend-driven off leave_in_minutes;
+        # this just surfaces the configured lead time.
+        "alert_lead_minutes": alert_lead_minutes,
         "stations": list(stations.values()),
         # Arrive-by trip recommendations (#27); empty when no [[trips]] configured.
         "trips": [_serialize_recommendation(r, now) for r in (recommendations or [])],
@@ -261,6 +266,7 @@ def state() -> dict[str, Any]:
         stale=poller.is_stale(snapshot, now=now),
         age_seconds=int(poller.age_seconds(snapshot, now=now)),
         refresh_interval_seconds=poller.refresh_seconds,
+        alert_lead_minutes=poller.alert_lead_minutes,
     )
 
 

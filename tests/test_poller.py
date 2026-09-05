@@ -86,11 +86,16 @@ def test_from_config_reads_intervals(monkeypatch):
     monkeypatch.setattr(
         poller_mod,
         "load_config",
-        lambda: {"refresh_interval_seconds": 15, "stale_after_seconds": 45},
+        lambda: {
+            "refresh_interval_seconds": 15,
+            "stale_after_seconds": 45,
+            "alert_lead_minutes": 5,
+        },
     )
     p = Poller.from_config()
     assert p.refresh_seconds == 15
     assert p.stale_after_seconds == 45
+    assert p.alert_lead_minutes == 5
 
 
 def test_from_config_falls_back_to_defaults(monkeypatch):
@@ -98,6 +103,7 @@ def test_from_config_falls_back_to_defaults(monkeypatch):
     p = Poller.from_config()
     assert p.refresh_seconds == poller_mod.DEFAULT_REFRESH_SECONDS
     assert p.stale_after_seconds == poller_mod.DEFAULT_STALE_AFTER_SECONDS
+    assert p.alert_lead_minutes == poller_mod.DEFAULT_ALERT_LEAD_MINUTES
 
 
 # --- poll loop ---------------------------------------------------------------
@@ -313,11 +319,19 @@ def test_run_survives_unexpected_exception(monkeypatch):
 
 def test_clamps_bad_config_intervals():
     # Zero/negative can't busy-loop or crash sleep(); non-numeric fails fast.
-    p = Poller(refresh_seconds=0, stale_after_seconds=-5, max_backoff_seconds=1)
+    p = Poller(
+        refresh_seconds=0,
+        stale_after_seconds=-5,
+        max_backoff_seconds=1,
+        alert_lead_minutes=-3,
+    )
     assert p.refresh_seconds == poller_mod.MIN_REFRESH_SECONDS
     assert p.stale_after_seconds == 0.0
     # Backoff cap is never below the refresh interval.
     assert p.max_backoff_seconds == poller_mod.MIN_REFRESH_SECONDS
+    # A negative lead clamps to 0 (beep right at leave-by, never "before" a
+    # departure that's already here).
+    assert p.alert_lead_minutes == 0
     with pytest.raises(ValueError):
         Poller(refresh_seconds="not-a-number")
 
