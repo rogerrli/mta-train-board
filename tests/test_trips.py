@@ -11,12 +11,15 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from app import trips as trips_mod
 from app.arrivals import Arrival, ArrivalGroup
+from app.feeds import StopUpdate
 from app.stops import ResolvedStation, StopIndex
 from app.trips import (
     ResolvedTrip,
     TripConfigError,
     _check_trip_boarding,
+    fetch_board,
     recommend_trip,
     recommend_trips,
     resolve_trips,
@@ -183,6 +186,70 @@ def test_on_time_picks_latest_on_time_train_with_earlier_fallback():
     assert rec.fallback.departure == now + timedelta(minutes=7)
 
 
+def _crowd_group(trip, specs, now, walk_minutes=6):
+    """An ArrivalGroup whose trains carry per-train crowding hints (#28).
+
+    ``specs`` is a list of ``(depart_minute, crowding)`` pairs.
+    """
+    arrivals = [
+        Arrival(
+            minutes=m,
+            arrival=now + timedelta(minutes=m),
+            trip_id=f"t{m}",
+            headsign="59 St-Columbus Circle",
+            crowding=crowding,
+        )
+        for m, crowding in specs
+    ]
+    return ArrivalGroup(
+        station=trip.boarding,
+        line=trip.line,
+        direction=trip.direction,
+        direction_label="Northbound",
+        color="#0039A6",
+        arrivals=arrivals,
+        walk_minutes=walk_minutes,
+    )
+
+
+def test_recommendation_carries_crowding_hint():
+    # The boarding train's crowding hint (#28) rides onto the recommended option.
+    trip = _trip()
+    now = WEDNESDAY_7_40
+    group = _crowd_group(trip, [(9, "crowded")], now)  # 07:49 -> 08:29, on time
+    rec = recommend_trip(trip, group, now, travel_time=_fixed_ride(40))
+    assert rec.status == "on_time"
+    assert rec.recommended.crowding == "crowded"
+
+
+def test_crowded_pick_prefers_a_fallback_that_beats_the_crowd():
+    # On-time boardable trains at 07:46/47/48/49 (all arrive <= 08:30). The latest
+    # (07:49) is the pick but boards crowded; the 07:47 beats the crowd, so it
+    # becomes the fallback ahead of the default (07:48, the one right before).
+    trip = _trip()
+    now = WEDNESDAY_7_40
+    group = _crowd_group(
+        trip, [(6, None), (7, "beats_crowd"), (8, None), (9, "crowded")], now
+    )
+    rec = recommend_trip(trip, group, now, travel_time=_fixed_ride(40))
+    assert rec.recommended.departure == now + timedelta(minutes=9)
+    assert rec.recommended.crowding == "crowded"
+    # Comfort tiebreaker: the beats-the-crowd 07:47, not the default second-latest.
+    assert rec.fallback.departure == now + timedelta(minutes=7)
+    assert rec.fallback.crowding == "beats_crowd"
+
+
+def test_uncrowded_pick_keeps_the_default_earlier_fallback():
+    # When the pick isn't crowded, crowding doesn't reshuffle the fallback: it stays
+    # the on-time train right before the pick (07:48), not the earlier beats_crowd one.
+    trip = _trip()
+    now = WEDNESDAY_7_40
+    group = _crowd_group(trip, [(7, "beats_crowd"), (8, None), (9, None)], now)
+    rec = recommend_trip(trip, group, now, travel_time=_fixed_ride(40))
+    assert rec.recommended.departure == now + timedelta(minutes=9)
+    assert rec.fallback.departure == now + timedelta(minutes=8)
+
+
 def test_no_earlier_on_time_train_leaves_fallback_none():
     trip = _trip()
     now = WEDNESDAY_7_40
@@ -285,6 +352,76 @@ def test_recommend_trips_matches_group_by_station_line_direction():
     )
     recs = recommend_trips([trip], [other, matching], now, travel_time=_fixed_ride(40))
     assert recs[0].status == "on_time"
+
+
+# --- fetch_board: transfer-crowding wiring (#28) -----------------------------
+
+
+def _offline_board(monkeypatch, updates):
+    """Stub fetch_board's resolve+fetch so it computes offline from ``updates``.
+
+    Watches the Q and L at 14 St-Union Sq (a real complex in the vendored data, so
+    resolve_crowding_rules validates), each on its own synthetic parent stop.
+    """
+    stations = [
+        ResolvedStation(
+            name="14 St-Union Sq",
+            directions=("N",),
+            line_stops={"Q": "R20", "L": "L03"},
+            walk_minutes=None,
+        )
+    ]
+
+    def fake_resolve_and_fetch(config, index=None):
+        return stations, updates, 1.0, {}
+
+    monkeypatch.setattr(trips_mod, "resolve_and_fetch", fake_resolve_and_fetch)
+
+
+def _stop_update(route, stop, minutes, now, trip):
+    when = now + timedelta(minutes=minutes)
+    return StopUpdate(
+        route_id=route,
+        trip_id=trip,
+        stop_id=stop,
+        direction=stop[-1],
+        arrival=when,
+        departure=when,
+        headsign="x",
+    )
+
+
+def test_fetch_board_annotates_crowding_end_to_end(monkeypatch):
+    now = datetime(2026, 9, 1, 12, 0, tzinfo=EASTERN)
+    updates = [
+        _stop_update("Q", "R20N", 5, now, "q1"),  # my train
+        _stop_update("L", "L03N", 4, now, "l1"),  # feeder 1 min before -> crowds Q
+    ]
+    _offline_board(monkeypatch, updates)
+    config = {
+        "transfer_crowding": [{"name": "14 St-Union Sq", "line": "Q", "feeders": ["L"]}]
+    }
+    groups, recs = fetch_board(config, now=now)
+    assert recs == []
+    q = next(g for g in groups if g.line == "Q")
+    ell = next(g for g in groups if g.line == "L")
+    assert q.arrivals[0].crowding == "crowded"
+    assert ell.arrivals[0].crowding is None  # the feeder line isn't annotated
+
+
+def test_fetch_board_degrades_on_bad_crowding_config(monkeypatch, caplog):
+    now = datetime(2026, 9, 1, 12, 0, tzinfo=EASTERN)
+    updates = [_stop_update("Q", "R20N", 5, now, "q1")]
+    _offline_board(monkeypatch, updates)
+    # An unknown complex makes resolve_crowding_rules raise; fetch_board must catch
+    # it, log, and still serve the board with crowding simply disabled (not 503).
+    config = {"transfer_crowding": [{"name": "Nowhere", "line": "Q", "feeders": ["L"]}]}
+    with caplog.at_level("WARNING"):
+        groups, recs = fetch_board(config, now=now)
+    q = next(g for g in groups if g.line == "Q")
+    assert q.arrivals  # board still served
+    assert all(a.crowding is None for a in q.arrivals)
+    assert any("transfer_crowding" in r.message for r in caplog.records)
 
 
 # --- boarding-station cross-check --------------------------------------------

@@ -86,6 +86,9 @@ def _serialize_arrival(a: Arrival) -> dict[str, Any]:
         # station has no walk_minutes). The board styles urgency off this and
         # recomputes it every second from ``arrival`` between polls (issue #8).
         "catchability": a.catchability,
+        # Transfer-crowding comfort hint (#28): "crowded" / "beats_crowd", or null
+        # when no [[transfer_crowding]] rule covers this train. Advisory only.
+        "crowding": a.crowding,
     }
 
 
@@ -101,6 +104,8 @@ def _serialize_train_option(option: TrainOption | None) -> dict[str, Any] | None
         "arrival": option.arrival.isoformat() if option.arrival else None,
         "on_time": option.on_time,
         "lateness_minutes": option.lateness_minutes,
+        # Transfer-crowding hint (#28) for this boarding train, or null.
+        "crowding": option.crowding,
     }
 
 

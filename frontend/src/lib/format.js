@@ -27,6 +27,13 @@ export function catchabilityLabel(catchability) {
   );
 }
 
+// Human label for a train's transfer-crowding hint (issue #28), for the board's
+// advisory comfort note. `null`/unset -> nothing to say (no rule, or no adjacent
+// feeder). Kept short so it reads at a glance next to the countdown.
+export function crowdingLabel(crowding) {
+  return { crowded: "Crowded", beats_crowd: "Beats crowd" }[crowding] ?? null;
+}
+
 // Floored whole minutes from `now` to an ISO arrival time. Matches the backend's
 // _minutes_until (int(seconds // 60)): a 2m45s gap reads "2". Negative means the
 // train's arrival time has already passed.

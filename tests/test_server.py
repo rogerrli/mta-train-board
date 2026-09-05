@@ -106,6 +106,7 @@ def test_build_state_nests_groups_under_their_station():
         "trip_id": "t1",
         "headsign": "Uptown",
         "catchability": None,
+        "crowding": None,
     }
 
 
@@ -192,6 +193,28 @@ def test_build_state_exposes_catchability_walk_and_refresh():
     group = payload["stations"][0]["arrivals"][0]
     assert group["walk_minutes"] == 3.0
     assert [a["catchability"] for a in group["arrivals"]] == ["HURRY", "CATCHABLE"]
+
+
+def test_build_state_exposes_crowding_hint():
+    # Transfer-crowding hint (#28) rides on each arrival so the board can flag a
+    # packed train and mark one that beats the crowd.
+    from dataclasses import replace
+
+    groups = [
+        _group(
+            "14 St-Union Sq",
+            "Q",
+            "N",
+            [
+                replace(_arrival(5, trip="a"), crowding="crowded"),
+                replace(_arrival(9, trip="b"), crowding="beats_crowd"),
+                _arrival(12, trip="c"),
+            ],
+        )
+    ]
+    payload = server.build_state(groups, NOW)
+    arrivals = payload["stations"][0]["arrivals"][0]["arrivals"]
+    assert [a["crowding"] for a in arrivals] == ["crowded", "beats_crowd", None]
 
 
 def test_build_state_exposes_terminal_and_borough():
