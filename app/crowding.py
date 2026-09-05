@@ -154,6 +154,35 @@ def resolve_crowding_rules(
     return resolved
 
 
+def unwatched_crowding_warnings(
+    rules: list[CrowdingRule], groups: list[ArrivalGroup]
+) -> list[str]:
+    """Return a warning per rule whose line or feeders aren't watched groups.
+
+    Crowding reads the board's already-computed groups, so a rule naming a line or
+    feeders that aren't configured ``[[stations]]`` at the complex resolves fine
+    (the lines *are* served there) yet silently produces no hint. Surface that as a
+    debuggable warning -- crowding degrades rather than failing the board, so this
+    is advisory, not an error. Pure and offline.
+    """
+    watched = {(g.station, g.line) for g in groups}
+    warnings: list[str] = []
+    for rule in rules:
+        if (rule.station, rule.line) not in watched:
+            warnings.append(
+                f"transfer_crowding {rule.station!r}: line {rule.line!r} is not a "
+                f"watched [[stations]] block there, so its trains get no crowding "
+                f"hints. Add it as a [[stations]] block to enable them."
+            )
+        if not any((rule.station, f) in watched for f in rule.feeders):
+            warnings.append(
+                f"transfer_crowding {rule.station!r} line {rule.line!r}: none of its "
+                f"feeders {list(rule.feeders)} are watched [[stations]] there, so "
+                f"nothing feeds the crowd. Add the feeder line(s) as [[stations]]."
+            )
+    return warnings
+
+
 def _hint(
     when: datetime, feeder_times: list[datetime], window: timedelta
 ) -> CrowdingHint | None:

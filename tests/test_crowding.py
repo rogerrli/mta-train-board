@@ -18,6 +18,7 @@ from app.crowding import (
     CrowdingRule,
     annotate_crowding,
     resolve_crowding_rules,
+    unwatched_crowding_warnings,
     validated_crowd_window,
 )
 from app.stops import StopIndex
@@ -162,6 +163,29 @@ def test_rule_only_applies_at_its_own_station():
     )
     assert out[0].arrivals[0].crowding == "crowded"
     assert out[1].arrivals[0].crowding is None  # different station, untouched
+
+
+# --- unwatched-line warnings -------------------------------------------------
+
+
+def test_no_warnings_when_line_and_a_feeder_are_watched():
+    rule = CrowdingRule(STATION, "Q", ("L", "6"))
+    groups = [_group("Q", "N", [5]), _group("L", "N", [4])]
+    assert unwatched_crowding_warnings([rule], groups) == []
+
+
+def test_warns_when_the_annotated_line_is_not_watched():
+    rule = CrowdingRule(STATION, "Q", ("L",))
+    groups = [_group("L", "N", [4])]  # feeder watched, but no Q group
+    (msg,) = unwatched_crowding_warnings([rule], groups)
+    assert "line 'Q'" in msg and "not a watched" in msg
+
+
+def test_warns_when_no_feeder_is_watched():
+    rule = CrowdingRule(STATION, "Q", ("L", "6"))
+    groups = [_group("Q", "N", [5])]  # my line watched, but no feeder groups
+    (msg,) = unwatched_crowding_warnings([rule], groups)
+    assert "none of its feeders" in msg
 
 
 # --- config resolution -------------------------------------------------------

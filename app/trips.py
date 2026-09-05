@@ -61,6 +61,7 @@ from app.crowding import (
     CrowdingConfigError,
     annotate_crowding,
     resolve_crowding_rules,
+    unwatched_crowding_warnings,
     validated_crowd_window,
 )
 from app.feeds import EASTERN
@@ -519,6 +520,12 @@ def fetch_board(
     # would strand /api/state at 503 -- unlike a trip config error, this degrades).
     try:
         rules = resolve_crowding_rules(config, index=index)
+        # A rule can name a line/feeder that's served at the complex but isn't a
+        # watched [[stations]] block -- then it silently yields no hint. Warn (don't
+        # fail) so that's debuggable, matching crowding's advisory, degrade-not-fail
+        # nature (a trip config error, by contrast, fails the poll in #27).
+        for msg in unwatched_crowding_warnings(rules, groups):
+            logger.warning("%s", msg)
         groups = annotate_crowding(
             groups, rules, window_minutes=validated_crowd_window(config)
         )
