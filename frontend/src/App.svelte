@@ -11,12 +11,17 @@
   import { createLeaveAlert } from "./lib/alert.js";
 
   const board = createBoard();
-  // Focus-mode leave-by alert (issue #54): a two-note chime as a heads-up
-  // `alert_lead_minutes` before you need to leave for the focused trip's #27
-  // recommendation. `beeper` owns the Web Audio sound + kiosk unlock; `leaveAlert`
-  // owns the "once per departure" arming. Both are plain objects, created once.
+  // Focus-mode leave-by alerts (issues #54, #69). Two cues for the focused trip's
+  // #27 recommendation: a rising two-note *heads-up* `alert_lead_minutes` before
+  // leave-by, and a lower, insistent *leave-now* pulse when leave-by hits 0.
+  // `beeper` owns the Web Audio sounds + kiosk unlock. The two alerters share one
+  // arming primitive (it takes the threshold as a parameter): the heads-up arms at
+  // `alert_lead_minutes`, leave-now at 0. Independent instances, so each fires at
+  // most once per departure and re-arms on its own when a later train is picked.
+  // All plain objects, created once.
   const beeper = createBeeper();
   const leaveAlert = createLeaveAlert();
+  const leaveNowAlert = createLeaveAlert();
 
   // Wall-clock tick: drives the per-second countdown recompute across the board.
   let now = $state(Date.now());
@@ -115,20 +120,28 @@
   // The takeover shows only when a focus trip resolves and we haven't dismissed it.
   const showFocus = $derived(!!focusTrip && !dismissed);
 
-  // Audible leave-by alert (issue #54). Server-configured lead time (default 10);
-  // the board beeps once when the focused trip's on-time recommendation is first
-  // within this many minutes of its leave-by. `leaveAlert` de-dupes per departure
-  // and re-arms when a new train is recommended. We gate on `audioReady` before
-  // asking so a muted board doesn't consume a departure's one alert -- if you tap
-  // "Enable sound" while still inside the window, the next tick can still fire.
-  // Keyed on `focusTrip` (the focus window being active), not `showFocus`: a #60
-  // dismiss hides the takeover but you still want the across-the-room heads-up.
+  // Audible leave-by alerts (issues #54, #69). Server-configured lead time
+  // (default 10) drives the heads-up chime when the focused trip's on-time
+  // recommendation is first within that many minutes of its leave-by; the urgent
+  // leave-now pulse follows at 0. Each alerter de-dupes per departure and re-arms
+  // when a new train is recommended. We gate both on `audioReady` before asking so
+  // a muted board doesn't consume a departure's one alert -- if you tap "Enable
+  // sound" while still inside the window, the next tick can still fire. Keyed on
+  // `focusTrip` (the focus window being active), not `showFocus`: a #60 dismiss
+  // hides the takeover but you still want the across-the-room cues.
   const leadMinutes = $derived($board.payload?.alert_lead_minutes ?? 10);
 
   $effect(() => {
     if (!audioReady) return;
     if (leaveAlert.shouldFire(focusTrip, leadMinutes, now)) {
       beeper.beep();
+    }
+    // The urgent leave-now cue (issue #69): same arming primitive at a 0-minute
+    // threshold, firing when leave_in first hits 0 -- the moment FocusView shows
+    // "leave now". Independent of the heads-up above: each fires once per
+    // departure and re-arms separately when a later train is recommended.
+    if (leaveNowAlert.shouldFire(focusTrip, 0, now)) {
+      beeper.urgentBeep();
     }
   });
 
