@@ -54,10 +54,11 @@ export function formatDuration(minutes) {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
-// Display label for a floored countdown. `liveArrivals` already drops departed
-// trains, so `minutes` is >= 0 here; 0 means under a minute out, which reads as
-// a bug as the bare number "0" (and worse in the HURRY band). Show "Due" for it
-// (transit convention), the compact duration otherwise.
+// Display label for a floored countdown. `liveArrivals` feeds this only 0..59
+// (departed trains and anything an hour+ out are dropped, issue #78); 0 means
+// under a minute out, which reads as a bug as the bare number "0" (and worse in
+// the HURRY band). Show "Due" for it (transit convention), the compact duration
+// otherwise -- the "Hh Mm" branch stays for any other caller.
 export function countdownLabel(minutes) {
   return minutes < 1 ? "Due" : formatDuration(minutes);
 }
@@ -72,8 +73,14 @@ export function classify(minutes, walkMinutes, delta = DEFAULT_WALK_DELTA) {
   return "MISSED";
 }
 
+// A train an hour or more out isn't something you act on from a glance board:
+// showing it just crowds the row and rolls the countdown into an "Nh Mm" label
+// nobody's waiting on. Drop anything at or past this cutoff (issue #78).
+export const FAR_FUTURE_CUTOFF_MINUTES = 60;
+
 // Recompute one arrival group's live view: drop trains whose arrival has passed
-// (minutes < 0, matching the backend), and attach fresh minutes + catchability.
+// (minutes < 0, matching the backend) or is FAR_FUTURE_CUTOFF_MINUTES+ out
+// (issue #78), and attach fresh minutes + catchability.
 // Reclassification uses the default grace window (DEFAULT_WALK_DELTA); the server
 // applies any configured walk_best_case_delta_minutes and its authoritative
 // catchability re-syncs on every poll, so a non-default grace only affects the
@@ -83,6 +90,7 @@ export function liveArrivals(group, now) {
   for (const a of group.arrivals) {
     const minutes = minutesUntil(a.arrival, now);
     if (minutes < 0) continue; // already departed -> drop, as the backend does
+    if (minutes >= FAR_FUTURE_CUTOFF_MINUTES) continue; // too far out to act on
     out.push({
       ...a,
       minutes,

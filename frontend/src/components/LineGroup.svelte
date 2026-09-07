@@ -92,9 +92,27 @@
     border-radius: clamp(0.3rem, 0.8vw, 0.6rem);
   }
 
-  /* Anchors the alert badge (#13) to the bullet's top-right corner. */
+  /* Hover/press swaps the row background to --panel-edge (shared .tap-reset
+     feedback, app.css). The split-flap tiles (#53) paint an opaque --flap-bg
+     behind each glyph -- set from the card's --panel (#76) -- so without this
+     they'd show a seam against the highlighted row. Track the state so the
+     tiles stay flush. */
+  .group:active {
+    --flap-bg: var(--panel-edge);
+  }
+  @media (hover: hover) {
+    .group:hover {
+      --flap-bg: var(--panel-edge);
+    }
+  }
+
+  /* Anchors the alert badge (#13) to the bullet's top-right corner. As a grid
+     item in the card's `auto` first column (issue #67), it would otherwise
+     stretch to fill the track whenever the card has horizontal slack, dragging
+     the absolutely-positioned badge off to the right of the bullet -- so pin it
+     to its content width and keep the badge on the letter. */
   .bullet-wrap {
-    flex: none;
+    justify-self: start;
     position: relative;
     display: inline-flex;
   }
