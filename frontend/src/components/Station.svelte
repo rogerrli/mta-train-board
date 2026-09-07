@@ -40,6 +40,9 @@
        App.svelte, its height from its own content. min-width:0 lets the cell
        shrink to its track instead of being forced wide by a long line row. */
     min-width: 0;
+    /* The card sits on --panel; match it so the flip tiles (#53) in each line
+       row occlude cleanly instead of ghosting on the page background (#65). */
+    --flap-bg: var(--panel);
     background: var(--panel);
     border: 1px solid var(--panel-edge);
     border-radius: clamp(0.4rem, 1vw, 0.9rem);
