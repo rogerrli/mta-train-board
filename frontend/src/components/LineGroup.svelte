@@ -112,7 +112,6 @@
      the absolutely-positioned badge off to the right of the bullet -- so pin it
      to its content width and keep the badge on the letter. */
   .bullet-wrap {
-    flex: none;
     justify-self: start;
     position: relative;
     display: inline-flex;
