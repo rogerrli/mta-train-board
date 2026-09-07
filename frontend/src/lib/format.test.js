@@ -19,6 +19,7 @@ import {
   leaveInMinutes,
   stationWalkMinutes,
   DEFAULT_WALK_DELTA,
+  FAR_FUTURE_CUTOFF_MINUTES,
   GLANCE_LIMIT,
 } from "./format.js";
 
@@ -90,6 +91,23 @@ test("liveArrivals drops departed trains and attaches fresh minutes/catchability
       ["c", 4, "HURRY"],
       ["d", 2, "MISSED"],
     ],
+  );
+});
+
+test("liveArrivals drops trains an hour or more out (issue #78)", () => {
+  assert.equal(FAR_FUTURE_CUTOFF_MINUTES, 60);
+  const group = {
+    walk_minutes: 5,
+    arrivals: [
+      { trip_id: "soon", arrival: iso(12) },
+      { trip_id: "edge", arrival: iso(59, 59) }, // 59 -> kept
+      { trip_id: "hour", arrival: iso(60) }, // 60 -> dropped
+      { trip_id: "far", arrival: iso(125) }, // dropped
+    ],
+  };
+  assert.deepEqual(
+    liveArrivals(group, NOW).map((a) => a.trip_id),
+    ["soon", "edge"],
   );
 });
 
