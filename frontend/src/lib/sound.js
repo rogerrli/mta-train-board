@@ -1,6 +1,6 @@
-// A short Web Audio chime and the one-gesture unlock the kiosk needs (#54).
+// Short Web Audio cues and the one-gesture unlock the kiosk needs (#54, #69).
 //
-// No asset, no dependency (YAGNI) -- a two-note beep synthesized on the fly.
+// No asset, no dependency (YAGNI) -- the beeps are synthesized on the fly.
 // Browsers block audio until a user gesture, so a fresh AudioContext starts
 // "suspended"; `unlock()` (called from a tap) resumes it. On the Pi/Chromium
 // kiosk launched with --autoplay-policy=no-user-gesture-required the context
@@ -38,6 +38,20 @@ export function createBeeper() {
     osc.stop(start + duration);
   }
 
+  // Build the context, nudge it awake, and run `schedule(c, startTime)` to lay
+  // down a cue. Degrades to silence: no context, or a hostile audio state, just
+  // means no sound and no error. Shared by both cues below.
+  function play(schedule) {
+    const c = ensureCtx();
+    if (!c) return;
+    if (c.state === "suspended") c.resume().catch(() => {});
+    try {
+      schedule(c, c.currentTime);
+    } catch {
+      // Ignore: a hostile audio state shouldn't break the board.
+    }
+  }
+
   return {
     // Resume the context from a user gesture (or confirm the kiosk flag already
     // started it running). Returns whether audio is usable at all.
@@ -51,18 +65,24 @@ export function createBeeper() {
     ready() {
       return ctx != null && ctx.state === "running";
     },
-    // Play the two-note heads-up chime. No-op (silent) if audio isn't available.
+    // The lead-time heads-up: a rising two-note chime (#54). Silent no-op if
+    // audio isn't available.
     beep() {
-      const c = ensureCtx();
-      if (!c) return;
-      if (c.state === "suspended") c.resume().catch(() => {});
-      try {
-        const t = c.currentTime;
+      play((c, t) => {
         tone(c, 880, t, 0.2); // A5
         tone(c, 1319, t + 0.22, 0.28); // E6 -- rising second note
-      } catch {
-        // Ignore: a hostile audio state shouldn't break the board.
-      }
+      });
+    },
+    // The leave-now cue: three low, repeated pulses (#69) -- an octave below the
+    // heads-up and insistent, so "go now" is unmistakable across the room and
+    // audibly distinct from the rising chime. Silent no-op if audio isn't
+    // available.
+    urgentBeep() {
+      play((c, t) => {
+        tone(c, 440, t, 0.15); // A4
+        tone(c, 440, t + 0.27, 0.15);
+        tone(c, 440, t + 0.54, 0.15);
+      });
     },
   };
 }

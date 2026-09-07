@@ -97,3 +97,25 @@ test("honors a custom lead time", () => {
   assert.equal(alert.shouldFire(trip(6), 5, NOW), false);
   assert.equal(alert.shouldFire(trip(5), 5, NOW), true);
 });
+
+// Leave-now cue (issue #69): the same primitive at a 0-minute threshold. The
+// urgent pulse fires when leave_in first hits 0 -- once per departure, re-arming
+// for a genuinely later train, and never for a train you can't make.
+test("leave-now (lead 0) fires once when leave_in first hits 0", () => {
+  const alert = createLeaveAlert();
+  assert.equal(alert.shouldFire(trip(1), 0, NOW), false); // 1 min out -> not yet
+  assert.equal(alert.shouldFire(trip(0), 0, NOW), true); // leave now -> fire
+  assert.equal(alert.shouldFire(trip(0), 0, NOW), false); // stays quiet after
+});
+
+test("leave-now (lead 0) re-arms for a genuinely later train", () => {
+  const alert = createLeaveAlert();
+  assert.equal(alert.shouldFire(trip(0), 0, NOW), true); // fire for train A
+  assert.equal(alert.shouldFire(trip(12), 0, NOW), false); // train B, re-armed
+  assert.equal(alert.shouldFire(trip(0), 0, NOW), true); // B reaches leave-now
+});
+
+test("leave-now (lead 0) stays silent for a train you can't make", () => {
+  const alert = createLeaveAlert();
+  assert.equal(alert.shouldFire(trip(0, "late"), 0, NOW), false);
+});
