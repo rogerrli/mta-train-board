@@ -185,6 +185,38 @@ export function agoLabel(seconds) {
   return `${mins}m ago`;
 }
 
+// Live seconds since an ISO timestamp, off the shared clock, clamped at 0.
+// Shared by the status bar ("updated N ago") and the connection banner
+// ("arrivals from N ago") so both measure data age the same way.
+export function elapsedSeconds(sinceIso, now) {
+  const t = Date.parse(sinceIso);
+  return Number.isNaN(t) ? 0 : Math.max(0, (now - t) / 1000);
+}
+
+// Device-clock offset detection (issue #14). Every countdown on the board is
+// computed on the device clock, so a kiosk whose time has drifted (no NTP yet)
+// would silently show wrong minutes. `/api/state` carries `server_time` (the
+// server's clock at request time); comparing it to the device clock the moment
+// the response lands gives the milliseconds to add to `Date.now()` so countdowns
+// are computed against the server's clock instead. Same-origin latency on the
+// device is a few ms -- far below the skew threshold below -- so we don't correct
+// for round-trip time.
+export function clockOffsetMs(serverTimeIso, receivedAtMs = Date.now()) {
+  const serverMs = new Date(serverTimeIso).getTime();
+  if (Number.isNaN(serverMs)) return 0;
+  return serverMs - receivedAtMs;
+}
+
+// How far the device clock must be off from the server's before the board stops
+// trusting it and shows the "clock is off" note (issue #14). One minute: well
+// past request latency and refresh jitter, well under a drift that would visibly
+// lie about countdowns.
+export const CLOCK_SKEW_THRESHOLD_MS = 60_000;
+
+export function isClockSkewed(offsetMs) {
+  return Math.abs(offsetMs) > CLOCK_SKEW_THRESHOLD_MS;
+}
+
 // Text color (black/white) for a line bullet, picked for contrast against the
 // route's background color via relative luminance. The MTA's yellow (NQRW) and
 // grey (L, shuttles) lines take black text; the dark trunks take white.

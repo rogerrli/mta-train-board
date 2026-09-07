@@ -1,13 +1,11 @@
 <script>
-  import { agoLabel, clockTime } from "../lib/format.js";
+  import { agoLabel, clockTime, elapsedSeconds } from "../lib/format.js";
 
   let { payload, offline, now } = $props();
 
   // Live "updated Xs ago", ticking off the shared clock rather than the frozen
   // age_seconds in the payload.
-  const ageSeconds = $derived(
-    payload ? Math.max(0, (now - new Date(payload.updated_at).getTime()) / 1000) : 0,
-  );
+  const ageSeconds = $derived(payload ? elapsedSeconds(payload.updated_at, now) : 0);
 
   // The server flags `stale` once its cache ages past the configured threshold;
   // a failed fetch adds `offline`. Either one dims the board's freshness dot.

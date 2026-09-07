@@ -21,6 +21,9 @@ import {
   DEFAULT_WALK_DELTA,
   FAR_FUTURE_CUTOFF_MINUTES,
   GLANCE_LIMIT,
+  clockOffsetMs,
+  isClockSkewed,
+  CLOCK_SKEW_THRESHOLD_MS,
 } from "./format.js";
 
 const NOW = Date.UTC(2026, 7, 30, 16, 0, 0); // fixed epoch ms
@@ -182,6 +185,31 @@ test("stationWalkMinutes returns the shared value, else null (issue #10)", () =>
   );
   // A single group with a walk time still resolves.
   assert.equal(stationWalkMinutes({ arrivals: [{ walk_minutes: 4 }] }), 4);
+});
+
+test("clockOffsetMs is the signed gap from device clock to server_time (issue #14)", () => {
+  const received = Date.UTC(2026, 8, 7, 12, 0, 0);
+  // Device clock 90s behind the server -> positive offset to add to Date.now().
+  assert.equal(
+    clockOffsetMs(new Date(received + 90_000).toISOString(), received),
+    90_000,
+  );
+  // Device clock ahead of the server -> negative offset.
+  assert.equal(
+    clockOffsetMs(new Date(received - 45_000).toISOString(), received),
+    -45_000,
+  );
+  // Missing / unparseable server_time (older payload, demo server) -> no offset.
+  assert.equal(clockOffsetMs(undefined, received), 0);
+  assert.equal(clockOffsetMs("not a date", received), 0);
+});
+
+test("isClockSkewed trips only past the threshold (issue #14)", () => {
+  assert.equal(isClockSkewed(0), false);
+  assert.equal(isClockSkewed(CLOCK_SKEW_THRESHOLD_MS - 1), false);
+  assert.equal(isClockSkewed(-(CLOCK_SKEW_THRESHOLD_MS - 1)), false);
+  assert.equal(isClockSkewed(CLOCK_SKEW_THRESHOLD_MS + 1), true);
+  assert.equal(isClockSkewed(-5 * 60_000), true);
 });
 
 test("alertTiming reads live vs. planned windows (issue #13)", () => {

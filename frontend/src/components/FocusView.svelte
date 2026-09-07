@@ -22,7 +22,12 @@
   // either affordance -- the corner ✕ or a tap anywhere on the card (a full-bleed
   // button behind the display-only content). App owns the dismiss state and the
   // auto-return.
-  let { trip, now, ondismiss } = $props();
+  // `degraded` (issue #14): the board's data is stale or the fetch is offline, so
+  // the leave-by countdown and train times below are computed from a frozen
+  // prediction. Fade them the same way the glance board fades its countdowns --
+  // the ConnectionBanner above says why -- while the line + destination header
+  // stays full-strength so the card is still readable.
+  let { trip, now, degraded = false, ondismiss } = $props();
 
   const rec = $derived(trip.recommended);
   const textColor = $derived(bulletTextColor(trip.color));
@@ -33,7 +38,7 @@
   const heading = $derived(trip.terminal ?? trip.destination);
 </script>
 
-<section class="focus {trip.status}">
+<section class="focus {trip.status}" class:degraded>
   <!-- Tap-anywhere dismiss: a full-bleed button behind the display-only content
        (which is pointer-events:none, see .content), so any tap on the card lands
        here. Hidden from AT and the tab order (mirrors Modal's backdrop) -- the
@@ -144,6 +149,16 @@
   .focus.no_estimate,
   .focus.no_target {
     border-top-color: var(--hurry);
+  }
+
+  /* Stale/offline data (issue #14): fade the train times and the leave-by
+     countdown so a frozen "leave in 3 min" doesn't read as live -- matching the
+     glance board's dimmed countdowns. The header (line + destination) stays
+     full-strength; the ConnectionBanner above carries the "why". */
+  .focus.degraded .body,
+  .focus.degraded .leave {
+    opacity: 0.4;
+    transition: opacity 0.3s ease;
   }
 
   /* Display-only content: neutralize its pointer events so every tap on the card

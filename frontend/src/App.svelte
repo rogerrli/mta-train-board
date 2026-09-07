@@ -7,6 +7,7 @@
   import Recommendation from "./components/Recommendation.svelte";
   import FocusView from "./components/FocusView.svelte";
   import FocusReturn from "./components/FocusReturn.svelte";
+  import ConnectionBanner from "./components/ConnectionBanner.svelte";
   import { createBeeper } from "./lib/sound.js";
   import { createLeaveAlert } from "./lib/alert.js";
 
@@ -24,7 +25,14 @@
   const leaveNowAlert = createLeaveAlert();
 
   // Wall-clock tick: drives the per-second countdown recompute across the board.
-  let now = $state(Date.now());
+  // `deviceNow` is the raw device clock; `now` corrects it by the server-clock
+  // offset the last poll measured (issue #14), so every countdown, the status
+  // clock, and the leave-by alerts stay right even on a kiosk whose clock has
+  // drifted. The store seeds `clockOffset` to 0 and keeps it a number, so it's 0
+  // until the first good poll and on a demo server that omits `server_time` --
+  // `now` is just the device clock then.
+  let deviceNow = $state(Date.now());
+  const now = $derived(deviceNow + $board.clockOffset);
 
   // Whether audio is unlocked and can play without a user gesture. False until a
   // tap on "Enable sound" resumes the context -- unless the Chromium kiosk flag
@@ -34,7 +42,7 @@
 
   $effect(() => {
     board.start();
-    const id = setInterval(() => (now = Date.now()), 1000);
+    const id = setInterval(() => (deviceNow = Date.now()), 1000);
     // Detect the kiosk-flag case: creating the context reveals whether it starts
     // "running" (flag set) or "suspended" (needs the tap). Harmless either way.
     beeper.unlock();
@@ -46,6 +54,14 @@
   });
 
   const stations = $derived($board.payload?.stations ?? []);
+
+  // Degraded data (issue #14): the last fetch failed (`offline`) or the server's
+  // own cache has aged past `stale_after_seconds` (`stale`). Either way the
+  // countdowns on screen are computed from frozen predictions that may no longer
+  // be true, so the board shows a banner and dims them rather than presenting
+  // them as live. Clears itself the moment a fresh poll lands. (Clock skew is a
+  // separate axis the banner derives from `clockOffset` on its own.)
+  const degraded = $derived($board.offline || ($board.payload?.stale ?? false));
 
   // Service alerts (issue #13), matched to the watched lines server-side and
   // sorted current-first. Each carries the affected `lines`, so a station's line
@@ -172,8 +188,24 @@
     </div>
   {:else}
     <StatusBar payload={$board.payload} offline={$board.offline} {now} />
+    <!-- Loud degraded-state banner (issue #14): "reconnecting" while a fetch is
+         failing, "showing older data" once the server's cache is stale, plus a
+         "device clock is off" note. Sits above both the focus takeover and the
+         glance board so the warning is never hidden behind a dedicated trip. -->
+    <ConnectionBanner
+      offline={$board.offline}
+      {degraded}
+      updatedAt={$board.payload?.updated_at}
+      clockOffset={$board.clockOffset}
+      {now}
+    />
     {#if showFocus}
-      <FocusView trip={focusTrip} {now} ondismiss={() => (dismissed = true)} />
+      <FocusView
+        trip={focusTrip}
+        {now}
+        {degraded}
+        ondismiss={() => (dismissed = true)}
+      />
     {:else}
       <!-- Arrive-by strip only while a focus window is active (issue #55). The
            `focus` directive is non-null exactly when a focus rule is firing; a
@@ -193,7 +225,11 @@
           <p class="hint">Add <code>[[stations]]</code> blocks to your config.</p>
         </div>
       {:else}
-        <div class="stations" style="--cols: {Math.min(stations.length, 2)}">
+        <div
+          class="stations"
+          class:degraded
+          style="--cols: {Math.min(stations.length, 2)}"
+        >
           {#each stations as station (station.name)}
             <Station
               {station}
@@ -276,6 +312,16 @@
     grid-template-columns: repeat(var(--cols), 1fr);
     align-content: safe center;
     gap: var(--gap);
+  }
+
+  /* Stale/offline data (issue #14): fade the countdown columns so a frozen "3
+     min" doesn't read as a live number. Station names, line bullets and the
+     banner above stay full-strength, so the board is still scannable -- it just
+     stops asserting the times are current. `.times` is the countdown block in
+     LineGroup; the transition matches the banner's fade-in. */
+  .stations.degraded :global(.times) {
+    opacity: 0.4;
+    transition: opacity 0.3s ease;
   }
 
   .recommendations {

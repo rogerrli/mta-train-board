@@ -111,9 +111,10 @@ def test_build_state_nests_groups_under_their_station():
 
 
 def test_build_state_empty_when_no_groups():
-    payload = server.build_state([], NOW)
+    payload = server.build_state([], NOW, now=NOW)
     assert payload == {
         "updated_at": NOW.isoformat(),
+        "server_time": NOW.isoformat(),
         "stale": False,
         "age_seconds": 0,
         "refresh_interval_seconds": 30.0,
@@ -165,6 +166,22 @@ def test_build_state_exposes_alert_lead_minutes():
     # surfaces the configured lead time (default 10) so the board knows when to beep.
     assert server.build_state([], NOW)["alert_lead_minutes"] == 10
     assert server.build_state([], NOW, alert_lead_minutes=5)["alert_lead_minutes"] == 5
+
+
+def test_build_state_sends_server_time_for_clock_skew(client: TestClient):
+    # server_time is the request clock, distinct from updated_at (last poll). The
+    # board diffs it against the device clock to correct/flag a skewed kiosk (#14).
+    poll_time = NOW - timedelta(minutes=3)
+    payload = server.build_state([], poll_time, now=NOW)
+    assert payload["server_time"] == NOW.isoformat()
+    assert payload["updated_at"] == poll_time.isoformat()
+
+    # And it rides through the live endpoint, close to real now.
+    server.poller._snapshot = Snapshot(groups=[], updated_at=datetime.now(EASTERN))
+    body = client.get("/api/state").json()
+    served = datetime.fromisoformat(body["server_time"])
+    assert served.tzinfo is not None
+    assert abs((datetime.now(EASTERN) - served).total_seconds()) < 5
 
 
 def test_build_state_passes_through_staleness():
