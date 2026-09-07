@@ -15,8 +15,9 @@ Scope note: this only shapes and serves the computed arrivals. A background
 :class:`~app.poller.Poller` (issue #6) refreshes the board on an interval and
 ``/api/state`` answers from that cache -- ``updated_at`` is the last successful
 poll and the payload carries ``stale``/``age_seconds`` so the UI can show "data
-is old". The ``alerts`` slot carries service alerts (issue #13) matched to the
-watched lines; richer stale/offline error states are issue #14.
+is old", plus ``server_time`` (this request's clock) so the board can detect and
+correct a skewed device clock (issue #14). The ``alerts`` slot carries service
+alerts (issue #13) matched to the watched lines.
 """
 
 from __future__ import annotations
@@ -184,9 +185,11 @@ def build_state(
     right now, or ``None``; when set, the payload's ``focus`` directive tells the
     board to dedicate the screen to that trip. ``now`` is the request clock each
     recommendation's #50 lead-in visibility is decided against (defaults to the
-    current Eastern time). ``alerts`` are the service alerts (#13) matched to the
-    watched lines; the board badges affected line groups and shows the text on
-    tap. Pure and offline -- unit-testable.
+    current Eastern time); it's also sent as ``server_time`` so the board can
+    detect a skewed device clock and correct its countdowns (issue #14).
+    ``alerts`` are the service alerts (#13) matched to the watched lines; the
+    board badges affected line groups and shows the text on tap. Pure and
+    offline -- unit-testable.
     """
     if now is None:
         now = datetime.now(EASTERN)
@@ -214,6 +217,12 @@ def build_state(
         )
     return {
         "updated_at": updated_at.isoformat(),
+        # The server's current clock (issue #14): the board compares it to the
+        # device clock when the response lands and offsets every countdown by the
+        # difference, so a Pi whose time drifted (no NTP yet) still shows correct
+        # minutes and flags itself. Distinct from ``updated_at``, which is the
+        # last *successful poll* and can be minutes old when ``stale``.
+        "server_time": now.isoformat(),
         "stale": stale,
         "age_seconds": age_seconds,
         "refresh_interval_seconds": refresh_interval_seconds,
@@ -252,7 +261,8 @@ def state() -> dict[str, Any]:
     snapshot = poller.snapshot
     if snapshot is None:
         # No successful poll yet (cold start or a sustained outage from boot).
-        # TODO(#14): richer stale/offline UX at the frontend.
+        # The board renders its own "waiting for the first arrivals" screen off
+        # this 503 and keeps retrying (issue #14, frontend lib/board.js).
         raise HTTPException(
             status_code=503, detail="Arrivals are temporarily unavailable."
         )

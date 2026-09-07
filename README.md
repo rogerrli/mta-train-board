@@ -92,6 +92,7 @@ curl http://127.0.0.1:8000/api/state
 ```json
 {
   "updated_at": "2026-08-29T21:59:10-04:00",
+  "server_time": "2026-08-29T21:59:22-04:00",
   "stale": false,
   "age_seconds": 12,
   "refresh_interval_seconds": 30,
@@ -146,6 +147,32 @@ caches the board; the endpoint serves that cache (never a live per-request fetch
 On a feed outage the last-known board keeps being served, flagged `stale` once
 older than `stale_after_seconds`; before the first successful poll the endpoint
 returns 503.
+
+`server_time` is the server's clock at request time (distinct from `updated_at`,
+the last successful poll). The board compares it to the device clock when the
+response lands and offsets every countdown by the difference — so a kiosk whose
+clock has drifted (no NTP yet) still shows correct minutes, and flags itself
+when the drift is over a minute (issue #14).
+
+### Resilience & error states
+
+The board degrades gracefully instead of showing a blank or misleading screen
+(issue #14):
+
+- **Feed outage / HTTP errors** — the backend keeps serving the last-known
+  board, flagged `stale`; the frontend dims the countdowns and shows a
+  "showing older data" banner until a fresh poll lands.
+- **Network loss at the device** — a failed `/api/state` fetch keeps the last
+  payload on screen under a "Reconnecting…" banner; the board recovers on its
+  own when the next poll succeeds.
+- **Cold start** — before the first successful poll the board shows a "waiting
+  for the first arrivals" screen and keeps retrying.
+- **Clock skew** — countdowns are auto-corrected against `server_time` (above).
+- **Backend crash** — the poll loop catches broadly and never dies on a feed or
+  parse error, so the process only exits on a genuinely fatal fault. Run it
+  under a supervisor with restart-on-failure (systemd `Restart=always`) so it
+  comes back on its own; the Pi service unit ships with the kiosk deployment
+  (issue #16).
 
 ### Configuration
 
